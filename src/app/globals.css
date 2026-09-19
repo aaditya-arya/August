@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
+  --color-background: #faf7f8;
+  --color-foreground: #1c1917;
 }
 
 :root {
-  --background: #09090b;
-  --foreground: #fafafa;
+  --background: #faf7f8;
+  --foreground: #1c1917;
 }
 
 body {
@@ -18,7 +18,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Scrollbar for dark mode */
+/* Custom Scrollbar for light pinkish theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -27,9 +27,10 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(244, 114, 182, 0.2);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(244, 114, 182, 0.35);
 }
+

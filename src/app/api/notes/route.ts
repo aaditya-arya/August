@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     if (noteError) {
       console.error("Supabase note insertion error:", noteError);
-      return NextResponse.json({ error: "Failed to save note" }, { status: 500 });
+      return NextResponse.json({ error: `Supabase error: ${noteError.message}` }, { status: 500 });
     }
 
     // 2. Extract structured data using Gemini
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         content: item.content,
         tags: item.tags,
         sentiment_or_mood: item.sentiment_or_mood,
-        embedding,
+        embedding: embedding.length > 0 ? embedding : null,
       });
     }
 
@@ -49,18 +49,35 @@ export async function POST(request: Request) {
 
       if (extractError) {
         console.error("Supabase extracted_items insertion error:", extractError);
-        // Continue anyway since the raw note is saved
       }
     }
 
     return NextResponse.json({ 
       success: true, 
       noteId: noteData.id,
-      extractedCount: inserts.length
+      extractedCount: inserts.length,
+      items: extractedItems
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Notes API Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  try {
+    const { data, error } = await supabase
+      .from("notes")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ notes: data || [] });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 });
   }
 }
