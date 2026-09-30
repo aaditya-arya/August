@@ -42,12 +42,8 @@ const extractionSchema: Schema = {
 
 export async function extractItems(text: string) {
   const candidateModels = [
-    "gemini-3.5-flash",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-flash-latest",
+    "gemini-3-flash-preview",
     "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
   ];
 
   const prompt = `You are a smart NLP engine for a note-taking app. 

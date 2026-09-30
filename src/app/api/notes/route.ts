@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { extractItems, generateEmbedding } from "@/lib/gemini";
+import { computeAndStoreGraphEdges } from "@/lib/graph";
 
 export async function POST(request: Request) {
   try {
@@ -42,13 +43,26 @@ export async function POST(request: Request) {
     }
 
     // 4. Save extracted items to Supabase
+    let insertedNodes: any[] = [];
     if (inserts.length > 0) {
-      const { error: extractError } = await supabase
+      const { data: insertedData, error: extractError } = await supabase
         .from("extracted_items")
-        .insert(inserts);
+        .insert(inserts)
+        .select();
 
       if (extractError) {
         console.error("Supabase extracted_items insertion error:", extractError);
+      } else {
+        insertedNodes = insertedData || [];
+      }
+    }
+
+    // 5. Compute graph connections on write (Semantic & Tag Edges + Pruning)
+    if (insertedNodes.length > 0) {
+      try {
+        await computeAndStoreGraphEdges(insertedNodes);
+      } catch (edgeErr) {
+        console.error("Failed to compute graph edges on write:", edgeErr);
       }
     }
 

@@ -43,7 +43,7 @@ export default function WeeklyDigestPage() {
   const learningItems = items.filter((i) => i.category === "Learning");
 
   return (
-    <div className="max-w-4xl mx-auto p-8 pt-16">
+    <div className="max-w-6xl mx-auto p-8 pt-16">
       <header className="mb-10">
         <h1 className="text-3xl font-extrabold text-zinc-900 mb-2 flex items-center gap-3 tracking-tight">
           Weekly Digest <CalendarDays className="text-pink-500" size={28} />
@@ -71,17 +71,22 @@ export default function WeeklyDigestPage() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-10">
-          {/* Accomplishments Section */}
-          <section>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-zinc-900">
-              <CheckCircle2 className="text-emerald-500" size={22} /> What you accomplished ({doneItems.length})
-            </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+          {/* Accomplishments Column */}
+          <section className="flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900">
+                <CheckCircle2 className="text-emerald-500" size={22} /> What you accomplished
+              </h2>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                {doneItems.length}
+              </span>
+            </div>
             <div className="grid gap-3">
               {doneItems.length === 0 ? (
-                <p className="text-xs text-zinc-400 italic bg-white/50 p-4 rounded-xl border border-pink-100">
-                  No completed tasks detected in the last 7 days.
-                </p>
+                <div className="text-center py-8 border-2 border-dashed border-emerald-100 rounded-2xl bg-white/50 p-4">
+                  <p className="text-xs text-zinc-400 font-medium">No completed tasks detected in the last 7 days.</p>
+                </div>
               ) : (
                 doneItems.map((item) => (
                   <div
@@ -90,7 +95,7 @@ export default function WeeklyDigestPage() {
                   >
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
-                    <div className="flex items-center gap-2 ml-2">
+                    <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
                       <span className="text-xs text-zinc-500 font-medium">
                         {format(new Date(item.created_at), "EEEE, h:mm a")}
                       </span>
@@ -106,16 +111,21 @@ export default function WeeklyDigestPage() {
             </div>
           </section>
 
-          {/* Learning Section */}
-          <section>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-zinc-900">
-              <BookOpen className="text-pink-500" size={22} /> What you learned ({learningItems.length})
-            </h2>
+          {/* Learning Column */}
+          <section className="flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900">
+                <BookOpen className="text-pink-500" size={22} /> What you learned
+              </h2>
+              <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-full border border-pink-200">
+                {learningItems.length}
+              </span>
+            </div>
             <div className="grid gap-3">
               {learningItems.length === 0 ? (
-                <p className="text-xs text-zinc-400 italic bg-white/50 p-4 rounded-xl border border-pink-100">
-                  No learning or insight items detected in the last 7 days.
-                </p>
+                <div className="text-center py-8 border-2 border-dashed border-pink-100 rounded-2xl bg-white/50 p-4">
+                  <p className="text-xs text-zinc-400 font-medium">No learning or insight items detected in the last 7 days.</p>
+                </div>
               ) : (
                 learningItems.map((item) => (
                   <div
@@ -124,7 +134,7 @@ export default function WeeklyDigestPage() {
                   >
                     <div className="absolute top-0 left-0 w-2 h-full bg-pink-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
-                    <div className="flex items-center gap-2 ml-2">
+                    <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
                       <span className="text-xs text-zinc-500 font-medium">
                         {format(new Date(item.created_at), "EEEE, h:mm a")}
                       </span>
