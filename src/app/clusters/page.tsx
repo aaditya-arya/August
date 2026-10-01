@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Folders, Search, ArrowRight, Loader2, Sparkles, X } from "lucide-react";
+import { Folders, Search, ArrowRight, Loader2, Sparkles, X, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
+import { generateGoogleCalendarUrl } from "@/lib/calendar";
 
 type Item = {
   id: string;
@@ -11,6 +12,15 @@ type Item = {
   content: string;
   tags?: string[];
   sentiment_or_mood?: string;
+  event_timestamp?: string;
+  calendar_action?: {
+    is_actionable: boolean;
+    title?: string;
+    start_time?: string;
+    end_time?: string;
+  } | null;
+  calendar_status?: string;
+  google_event_id?: string;
   created_at: string;
 };
 
@@ -206,8 +216,8 @@ export default function ClustersPage() {
                       <span className="text-xs font-bold uppercase tracking-wider text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-200/60">
                         {item.category}
                       </span>
-                      <span className="text-xs text-zinc-400 font-medium">
-                        {format(new Date(item.created_at), "MMM d, h:mm a")}
+                      <span className="text-xs text-zinc-500 font-medium">
+                        {format(new Date(item.event_timestamp || item.created_at), "MMM d, yyyy • h:mm a")}
                       </span>
                     </div>
                     <p className="text-zinc-900 font-semibold text-[15px] leading-relaxed">
@@ -223,6 +233,23 @@ export default function ClustersPage() {
                             #{t}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {item.calendar_action && item.calendar_action.is_actionable && (
+                      <div className="mt-3 pt-3 border-t border-pink-100 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs text-rose-600 font-semibold">
+                          <Calendar size={14} className="text-pink-500 shrink-0" />
+                          <span>Event: {item.calendar_action.title || "Scheduled Task"}</span>
+                        </div>
+                        <a
+                          href={generateGoogleCalendarUrl(item.calendar_action, item.content)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm transition-all"
+                        >
+                          <Calendar size={13} />
+                          Add to Google Calendar
+                        </a>
                       </div>
                     )}
                   </div>

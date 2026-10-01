@@ -7,6 +7,7 @@ export interface ExtractedItemNode {
   tags?: string[];
   sentiment_or_mood?: string;
   embedding?: number[] | string | null;
+  event_timestamp?: string;
   created_at?: string;
 }
 

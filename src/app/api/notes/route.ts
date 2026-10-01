@@ -6,11 +6,14 @@ import { computeAndStoreGraphEdges } from "@/lib/graph";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { content } = body;
+    const { content, currentTime, timezone } = body;
 
     if (!content) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 });
     }
+
+    const clientNow = currentTime || new Date().toISOString();
+    const clientTz = timezone || "UTC";
 
     // 1. Save the raw note to Supabase (The Daily Feed)
     const { data: noteData, error: noteError } = await supabase
@@ -24,20 +27,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Supabase error: ${noteError.message}` }, { status: 500 });
     }
 
-    // 2. Extract structured data using Gemini
-    const extractedItems = await extractItems(content);
+    // 2. Extract structured data using Gemini with absolute temporal context
+    const extractedItems = await extractItems(content, {
+      currentTime: clientNow,
+      timezone: clientTz,
+    });
 
     // 3. Generate embeddings and prepare inserts
     const inserts = [];
     for (const item of extractedItems) {
       const embedding = await generateEmbedding(item.content);
       
+      // Validate or fallback event_timestamp
+      let resolvedTimestamp = clientNow;
+      if (item.event_timestamp && !isNaN(Date.parse(item.event_timestamp))) {
+        resolvedTimestamp = new Date(item.event_timestamp).toISOString();
+      }
+
       inserts.push({
         note_id: noteData.id,
         category: item.category,
         content: item.content,
-        tags: item.tags,
-        sentiment_or_mood: item.sentiment_or_mood,
+        tags: item.tags || [],
+        sentiment_or_mood: item.sentiment_or_mood || null,
+        event_timestamp: resolvedTimestamp,
+        calendar_action: item.calendar_action || null,
+        calendar_status: item.calendar_action?.is_actionable ? "pending" : "none",
         embedding: embedding.length > 0 ? embedding : null,
       });
     }

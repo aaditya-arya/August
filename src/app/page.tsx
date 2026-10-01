@@ -60,7 +60,11 @@ export default function QuickDumpPage() {
       const res = await fetch("/api/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newNote.content }),
+        body: JSON.stringify({
+          content: newNote.content,
+          currentTime: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to process note");

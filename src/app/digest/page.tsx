@@ -11,6 +11,7 @@ type DigestItem = {
   content: string;
   tags?: string[];
   sentiment_or_mood?: string;
+  event_timestamp: string;
   created_at: string;
 };
 
@@ -49,7 +50,7 @@ export default function WeeklyDigestPage() {
           Weekly Digest <CalendarDays className="text-pink-500" size={28} />
         </h1>
         <p className="text-zinc-600 text-sm font-semibold">
-          {format(lastWeek, "MMM d")} – {format(today, "MMM d, yyyy")}
+          {format(lastWeek, "MMM d")} – {format(today, "MMM d, yyyy")} • Filtered by real event occurrence date
         </p>
       </header>
 
@@ -59,9 +60,9 @@ export default function WeeklyDigestPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-pink-200/80 rounded-3xl bg-white/60 p-8">
-          <p className="text-zinc-600 font-semibold mb-2">No accomplishments or learnings recorded this week.</p>
+          <p className="text-zinc-600 font-semibold mb-2">No accomplishments or learnings recorded for this period.</p>
           <p className="text-zinc-400 text-sm mb-6">
-            Dump notes about things you've completed or insights you've gained, and they will automatically show up here.
+            Dump notes about things you've completed or insights you've gained, and they will automatically show up based on when they occurred.
           </p>
           <Link
             href="/"
@@ -85,7 +86,7 @@ export default function WeeklyDigestPage() {
             <div className="grid gap-3">
               {doneItems.length === 0 ? (
                 <div className="text-center py-8 border-2 border-dashed border-emerald-100 rounded-2xl bg-white/50 p-4">
-                  <p className="text-xs text-zinc-400 font-medium">No completed tasks detected in the last 7 days.</p>
+                  <p className="text-xs text-zinc-400 font-medium">No completed tasks occurred in the last 7 days.</p>
                 </div>
               ) : (
                 doneItems.map((item) => (
@@ -96,11 +97,11 @@ export default function WeeklyDigestPage() {
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
                     <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                      <span className="text-xs text-zinc-500 font-medium">
-                        {format(new Date(item.created_at), "EEEE, h:mm a")}
+                      <span className="text-xs text-emerald-800 font-semibold bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-200/50">
+                        {format(new Date(item.event_timestamp || item.created_at), "EEEE, MMM d • h:mm a")}
                       </span>
                       {item.tags?.map((t) => (
-                        <span key={t} className="text-[11px] bg-emerald-50 text-emerald-700 font-medium px-2 py-0.5 rounded-md border border-emerald-200/60">
+                        <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
                           #{t}
                         </span>
                       ))}
@@ -124,7 +125,7 @@ export default function WeeklyDigestPage() {
             <div className="grid gap-3">
               {learningItems.length === 0 ? (
                 <div className="text-center py-8 border-2 border-dashed border-pink-100 rounded-2xl bg-white/50 p-4">
-                  <p className="text-xs text-zinc-400 font-medium">No learning or insight items detected in the last 7 days.</p>
+                  <p className="text-xs text-zinc-400 font-medium">No learning or insight items occurred in the last 7 days.</p>
                 </div>
               ) : (
                 learningItems.map((item) => (
@@ -135,11 +136,11 @@ export default function WeeklyDigestPage() {
                     <div className="absolute top-0 left-0 w-2 h-full bg-pink-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
                     <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                      <span className="text-xs text-zinc-500 font-medium">
-                        {format(new Date(item.created_at), "EEEE, h:mm a")}
+                      <span className="text-xs text-pink-800 font-semibold bg-pink-50/80 px-2 py-0.5 rounded-md border border-pink-200/50">
+                        {format(new Date(item.event_timestamp || item.created_at), "EEEE, MMM d • h:mm a")}
                       </span>
                       {item.tags?.map((t) => (
-                        <span key={t} className="text-[11px] bg-pink-50 text-pink-700 font-medium px-2 py-0.5 rounded-md border border-pink-200/60">
+                        <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
                           #{t}
                         </span>
                       ))}

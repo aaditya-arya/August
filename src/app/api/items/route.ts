@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("extracted_items")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("event_timestamp", { ascending: false });
 
     if (category) {
       query = query.eq("category", category);
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     if (days) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - parseInt(days, 10));
-      query = query.gte("created_at", cutoff.toISOString());
+      query = query.gte("event_timestamp", cutoff.toISOString());
     }
 
     const { data, error } = await query;
