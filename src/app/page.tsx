@@ -25,13 +25,18 @@ export default function QuickDumpPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [calendarConnectedBanner, setCalendarConnectedBanner] = useState(false);
+  const [sharedBanner, setSharedBanner] = useState(false);
 
   useEffect(() => {
-    // Check if redirected after Google Calendar OAuth connection
+    // Check if redirected after Google Calendar OAuth or Web Share Target
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("calendar") === "connected") {
         setCalendarConnectedBanner(true);
+        window.history.replaceState({}, "", "/");
+      }
+      if (params.get("shared") === "true") {
+        setSharedBanner(true);
         window.history.replaceState({}, "", "/");
       }
     }
@@ -133,6 +138,33 @@ export default function QuickDumpPage() {
           <button
             onClick={() => setCalendarConnectedBanner(false)}
             className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold px-2 py-1"
+          >
+            Dismiss
+          </button>
+        </motion.div>
+      )}
+
+      {/* Web Share Target Banner */}
+      {sharedBanner && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 bg-pink-50 border border-pink-200 rounded-2xl flex items-center justify-between shadow-xs"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-pink-900">Shared Note Captured!</p>
+              <p className="text-xs text-pink-700">
+                Text shared via native share menu was automatically sliced, embedded, categorized, and added to your Brain Graph.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSharedBanner(false)}
+            className="text-xs text-pink-700 hover:text-pink-900 font-semibold px-2 py-1"
           >
             Dismiss
           </button>

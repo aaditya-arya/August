@@ -14,7 +14,7 @@ const itemSchema: Schema = {
     },
     content: {
       type: Type.STRING,
-      description: "The extracted snippet of text",
+      description: "The extracted single atomic snippet of text (never lump multiple distinct thoughts together)",
     },
     tags: {
       type: Type.ARRAY,
@@ -61,6 +61,7 @@ const extractionSchema: Schema = {
     items: {
       type: Type.ARRAY,
       items: itemSchema,
+      description: "An array of individual atomic items. If the user pasted a list, multiple sentences, or several distinct thoughts, you MUST return multiple separate items in this array.",
     },
   },
   required: ["items"],
@@ -84,19 +85,28 @@ TEMPORAL CONTEXT:
 - Current Absolute Time: ${nowIso}
 - User Timezone: ${tz}
 
+CRITICAL "PASTE AND SPLIT" PROTOCOL:
+- When a user inputs a wall of text, multiple sentences, bullet points, numbered lines, or disjointed thoughts, you MUST NEVER treat it as one single lump thought.
+- You MUST slice and split the input into separate, individual atomic items in the output array.
+- For example:
+  * "Heard Starboy, buy groceries, finished the report" -> MUST be split into 3 distinct items (Media, Wishlist/Idea, Done).
+  * A 5-bullet grocery or task list -> MUST be split into 5 individual items so each becomes its own searchable node on the user's graph.
+  * Never summarize or collapse distinct ideas together.
+
 TASK:
-1. Analyze the following raw thought dump and extract distinct items.
+1. Analyze the following raw thought dump and slice it into all its distinct individual items.
 2. Categorize each item into EXACTLY ONE category: Done, Idea, Wishlist, Media, Shaairi_Quote, Learning.
 3. Generate 1 to 3 relevant tags and a sentiment/mood for each item.
 4. Calculate 'event_timestamp' (ISO 8601 format):
-   - If the note mentions relative time (e.g., "4 days ago", "last night", "on Tuesday", "yesterday morning"), mathematically calculate the exact past or future timestamp relative to the Current Absolute Time (${nowIso}).
+   - If the item mentions relative time (e.g., "4 days ago", "last night", "on Tuesday", "yesterday morning"), mathematically calculate the exact past or future timestamp relative to the Current Absolute Time (${nowIso}).
    - If no specific time or relative date is mentioned, use Current Absolute Time (${nowIso}).
 5. Detect Calendar Actionability ('calendar_action'):
    - Set 'is_actionable: true' ONLY if the item describes a future action, call, appointment, deadline, or scheduled task (e.g. "call Rohan about project tomorrow", "renew gym membership before Friday", "pay wifi bill by the 5th", "dentist appointment on Monday").
    - For actionable items, provide a clean 'title', 'start_time' (ISO 8601), and 'end_time' (ISO 8601).
    - If the item is general thought, past accomplishment, or non-time-bound desire/quote, set 'is_actionable: false'.
 
-Text: "${text}"`;
+Text to slice and extract:
+"""${text}"""`;
 
   const ai = getClient();
 
