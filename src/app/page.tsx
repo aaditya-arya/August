@@ -1,23 +1,41 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2, Sparkles, Calendar, CheckCircle2, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
+
+type CalendarEventInfo = {
+  title?: string;
+  start_time?: string;
+  htmlLink?: string;
+  eventId?: string;
+};
 
 type Note = {
   id: string;
   content: string;
   created_at: string;
   status: "sending" | "success" | "error";
+  calendarEvents?: CalendarEventInfo[];
 };
 
 export default function QuickDumpPage() {
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [calendarConnectedBanner, setCalendarConnectedBanner] = useState(false);
 
   useEffect(() => {
+    // Check if redirected after Google Calendar OAuth connection
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("calendar") === "connected") {
+        setCalendarConnectedBanner(true);
+        window.history.replaceState({}, "", "/");
+      }
+    }
+
     async function loadNotes() {
       try {
         const res = await fetch("/api/notes");
@@ -73,7 +91,14 @@ export default function QuickDumpPage() {
       
       setNotes((prev) =>
         prev.map((n) =>
-          n.id === newNote.id ? { ...n, id: data.noteId, status: "success" } : n
+          n.id === newNote.id
+            ? {
+                ...n,
+                id: data.noteId,
+                status: "success",
+                calendarEvents: data.calendarEventsSynced || [],
+              }
+            : n
         )
       );
     } catch (error) {
@@ -87,12 +112,39 @@ export default function QuickDumpPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 pt-16">
+      {/* Google Calendar Connected Banner */}
+      {calendarConnectedBanner && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between shadow-xs"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-emerald-900">Google Calendar Connected!</p>
+              <p className="text-xs text-emerald-700">
+                Any future tasks or calls you write will now automatically add to your calendar in the background.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setCalendarConnectedBanner(false)}
+            className="text-xs text-emerald-700 hover:text-emerald-900 font-semibold px-2 py-1"
+          >
+            Dismiss
+          </button>
+        </motion.div>
+      )}
+
       <header className="mb-10">
         <h1 className="text-4xl font-extrabold text-zinc-900 mb-2 flex items-center gap-3 tracking-tight">
           Quick Dump <Sparkles className="text-pink-500" size={30} />
         </h1>
         <p className="text-zinc-500 text-lg">
-          Empty your mind. The AI will organize and route it for you.
+          Empty your mind. The AI will organize, categorize, and auto-sync reminders for you.
         </p>
       </header>
 
@@ -104,7 +156,7 @@ export default function QuickDumpPage() {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What's on your mind? (e.g. Heard Starboy today, need to buy milk, finished the report...)"
+              placeholder="What's on your mind? (e.g. I have to call Rohan two days later, finished the report, buy milk...)"
               className="w-full bg-transparent text-zinc-800 p-6 min-h-[160px] resize-none focus:outline-none text-lg placeholder:text-zinc-400"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -147,12 +199,44 @@ export default function QuickDumpPage() {
                 <div className="w-2 h-2 rounded-full bg-pink-500 mt-2 shrink-0 shadow-[0_0_8px_rgba(244,114,182,0.8)]" />
                 <div className="flex-1">
                   <p className="text-zinc-700 leading-relaxed text-[15px]">{note.content}</p>
+
+                  {/* Calendar Event Badges */}
+                  {note.calendarEvents && note.calendarEvents.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {note.calendarEvents.map((evt, idx) => (
+                        <div
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-xl shadow-2xs"
+                        >
+                          <Calendar size={13} className="text-emerald-600" />
+                          <span>Added to Google Calendar: {evt.title || "Reminder"}</span>
+                          {evt.start_time && (
+                            <span className="text-emerald-600 font-normal">
+                              ({format(new Date(evt.start_time), "MMM d, h:mm a")})
+                            </span>
+                          )}
+                          {evt.htmlLink && (
+                            <a
+                              href={evt.htmlLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 hover:text-emerald-900 ml-1"
+                              title="Open in Google Calendar"
+                            >
+                              <ExternalLink size={11} />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="mt-3 flex items-center justify-between text-xs">
                     <span className="text-zinc-400 font-medium">
                       {format(new Date(note.created_at), "h:mm a")}
                     </span>
                     {note.status === "sending" && (
-                      <span className="text-pink-500 font-medium flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Routing...</span>
+                      <span className="text-pink-500 font-medium flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Routing & Syncing...</span>
                     )}
                     {note.status === "success" && (
                       <span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Routed ✓</span>

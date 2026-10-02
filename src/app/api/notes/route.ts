@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { extractItems, generateEmbedding } from "@/lib/gemini";
 import { computeAndStoreGraphEdges } from "@/lib/graph";
+import { autoCreateGoogleCalendarEvent } from "@/lib/calendar";
 
 export async function POST(request: Request) {
   try {
@@ -81,11 +82,46 @@ export async function POST(request: Request) {
       }
     }
 
+    // 6. Automatic Google Calendar Event Creation (Background, Zero-Click)
+    const calendarEventsSynced: any[] = [];
+    for (let i = 0; i < insertedNodes.length; i++) {
+      const node = insertedNodes[i];
+      const origItem = extractedItems[i];
+      if (origItem?.calendar_action?.is_actionable) {
+        try {
+          const calResult = await autoCreateGoogleCalendarEvent(
+            origItem.calendar_action,
+            origItem.content
+          );
+
+          if (calResult.success) {
+            calendarEventsSynced.push({
+              title: origItem.calendar_action.title,
+              start_time: origItem.calendar_action.start_time,
+              htmlLink: calResult.htmlLink,
+              eventId: calResult.eventId,
+            });
+
+            // Update database status
+            await supabase
+              .from("extracted_items")
+              .update({
+                calendar_status: "synced",
+              })
+              .eq("id", node.id);
+          }
+        } catch (calErr) {
+          console.error("Calendar auto-creation error:", calErr);
+        }
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
       noteId: noteData.id,
       extractedCount: inserts.length,
-      items: extractedItems
+      items: extractedItems,
+      calendarEventsSynced,
     });
 
   } catch (error: any) {
