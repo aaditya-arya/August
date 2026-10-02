@@ -15,6 +15,50 @@ type DigestItem = {
   created_at: string;
 };
 
+/**
+ * Calculates human-friendly relative time label (e.g., "Done 2 days ago", "Learned 3 months ago")
+ */
+function getRelativeTimeLabel(dateStr: string, actionPrefix: "Done" | "Learned"): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+
+    if (isNaN(d.getTime())) return `${actionPrefix} recently`;
+
+    if (diffMs < 0) {
+      return `${actionPrefix} recently`;
+    }
+
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffDays === 0) {
+      if (diffHours === 0) {
+        if (diffMinutes < 2) return `${actionPrefix} just now`;
+        return `${actionPrefix} ${diffMinutes} min ago`;
+      }
+      return `${actionPrefix} today (${diffHours}h ago)`;
+    }
+    if (diffDays === 1) {
+      return `${actionPrefix} yesterday`;
+    }
+    if (diffDays < 30) {
+      return `${actionPrefix} ${diffDays} days ago`;
+    }
+    if (diffMonths < 12) {
+      return `${actionPrefix} ${diffMonths} month${diffMonths > 1 ? "s" : ""} ago`;
+    }
+    return `${actionPrefix} ${diffYears} year${diffYears > 1 ? "s" : ""} ago`;
+  } catch {
+    return `${actionPrefix} recently`;
+  }
+}
+
 export default function WeeklyDigestPage() {
   const today = new Date();
   const lastWeek = subDays(today, 7);
@@ -97,8 +141,11 @@ export default function WeeklyDigestPage() {
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
                     <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                      <span className="text-xs text-emerald-800 font-semibold bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-200/50">
-                        {format(new Date(item.event_timestamp || item.created_at), "EEEE, MMM d • h:mm a")}
+                      <span
+                        title={format(new Date(item.event_timestamp || item.created_at), "EEEE, MMMM d, yyyy • h:mm a")}
+                        className="text-xs text-emerald-800 font-semibold bg-emerald-50/90 px-2.5 py-1 rounded-lg border border-emerald-200/60 shadow-2xs cursor-default"
+                      >
+                        {getRelativeTimeLabel(item.event_timestamp || item.created_at, "Done")}
                       </span>
                       {item.tags?.map((t) => (
                         <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
@@ -136,8 +183,11 @@ export default function WeeklyDigestPage() {
                     <div className="absolute top-0 left-0 w-2 h-full bg-pink-500 rounded-l-2xl"></div>
                     <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
                     <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                      <span className="text-xs text-pink-800 font-semibold bg-pink-50/80 px-2 py-0.5 rounded-md border border-pink-200/50">
-                        {format(new Date(item.event_timestamp || item.created_at), "EEEE, MMM d • h:mm a")}
+                      <span
+                        title={format(new Date(item.event_timestamp || item.created_at), "EEEE, MMMM d, yyyy • h:mm a")}
+                        className="text-xs text-pink-800 font-semibold bg-pink-50/90 px-2.5 py-1 rounded-lg border border-pink-200/60 shadow-2xs cursor-default"
+                      >
+                        {getRelativeTimeLabel(item.event_timestamp || item.created_at, "Learned")}
                       </span>
                       {item.tags?.map((t) => (
                         <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
