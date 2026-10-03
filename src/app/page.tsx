@@ -1,29 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
-  CalendarDays, 
-  CheckCircle2, 
-  BookOpen, 
-  Loader2, 
-  Send, 
   Sparkles, 
+  Send, 
+  Loader2, 
   Calendar, 
-  ExternalLink,
-  Plus,
-  ChevronDown,
-  ChevronUp,
-  Flame,
-  ArrowUpRight
+  Flame, 
+  Hourglass, 
+  BookOpen, 
+  Clock, 
+  TrendingDown, 
+  CheckCircle2, 
+  Compass, 
+  Coffee,
+  Sparkle,
+  ArrowRight
 } from "lucide-react";
-import { format, subDays } from "date-fns";
+import { format, subDays, differenceInDays } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { generateGoogleCalendarUrl } from "@/lib/calendar";
 import Link from "next/link";
 
-type DigestItem = {
+type LedgerItem = {
   id: string;
-  category: "Done" | "Learning" | "Idea" | "Wishlist" | "Media" | "Shaairi_Quote";
+  category: string;
+  life_texture?: string;
   content: string;
   tags?: string[];
   sentiment_or_mood?: string;
@@ -40,7 +42,112 @@ type DigestItem = {
 };
 
 /**
- * Calculates human-friendly relative time (e.g. "Yesterday", "2 days ago", "3 weeks ago")
+ * Maps raw category or content into an authentic Life Texture
+ */
+export function resolveLifeTexture(item: LedgerItem): {
+  key: "hard_work" | "quiet_moment" | "hard_truth" | "perspective" | "idea_spark";
+  label: string;
+  borderClass: string;
+  bgAccent: string;
+  textAccent: string;
+  icon: any;
+} {
+  const c = (item.category || "").toLowerCase();
+  const text = (item.content || "").toLowerCase();
+  const texture = (item.life_texture || "").toLowerCase();
+
+  // 1. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
+  if (
+    texture === "hard_truth" ||
+    c === "hard_truth" ||
+    text.includes("loss") ||
+    text.includes("lost") ||
+    text.includes("worst day") ||
+    text.includes("spent") ||
+    text.includes("expense") ||
+    text.includes("bought groceries") ||
+    text.includes("rupees") ||
+    text.includes("bill")
+  ) {
+    return {
+      key: "hard_truth",
+      label: "Hard Truth & Cost",
+      borderClass: "border-amber-200/80 hover:border-amber-300",
+      bgAccent: "bg-amber-500",
+      textAccent: "text-amber-800 bg-amber-50/90 border-amber-200/60",
+      icon: TrendingDown,
+    };
+  }
+
+  // 2. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
+  if (
+    texture === "perspective" ||
+    c === "perspective" ||
+    c === "learning" ||
+    text.includes("reading") ||
+    text.includes("book") ||
+    text.includes("realized") ||
+    text.includes("learned") ||
+    text.includes("lesson")
+  ) {
+    return {
+      key: "perspective",
+      label: "Perspective & Lesson",
+      borderClass: "border-rose-200/80 hover:border-rose-300",
+      bgAccent: "bg-pink-500",
+      textAccent: "text-pink-800 bg-pink-50/90 border-pink-200/60",
+      icon: BookOpen,
+    };
+  }
+
+  // 3. Quiet Moments (Conversations, walks, small joys, music, poetry)
+  if (
+    texture === "quiet_moment" ||
+    c === "quiet_moment" ||
+    c === "media" ||
+    c === "shaairi_quote" ||
+    text.includes("walk") ||
+    text.includes("song") ||
+    text.includes("met") ||
+    text.includes("conversation") ||
+    text.includes("quiet") ||
+    text.includes("coffee")
+  ) {
+    return {
+      key: "quiet_moment",
+      label: "Quiet Moment",
+      borderClass: "border-purple-200/80 hover:border-purple-300",
+      bgAccent: "bg-purple-500",
+      textAccent: "text-purple-800 bg-purple-50/90 border-purple-200/60",
+      icon: Coffee,
+    };
+  }
+
+  // 4. Ideas & Sparks
+  if (texture === "idea_spark" || c === "idea" || c === "wishlist" || c === "idea_desire") {
+    return {
+      key: "idea_spark",
+      label: "Idea & Desire",
+      borderClass: "border-blue-200/80 hover:border-blue-300",
+      bgAccent: "bg-blue-500",
+      textAccent: "text-blue-800 bg-blue-50/90 border-blue-200/60",
+      icon: Sparkle,
+    };
+  }
+
+  // 5. Default: Hard Work & Milestones
+  return {
+    key: "hard_work",
+    label: "Milestone & Hard Work",
+    borderClass: "border-emerald-200/80 hover:border-emerald-300",
+    bgAccent: "bg-emerald-500",
+    textAccent: "text-emerald-800 bg-emerald-50/90 border-emerald-200/60",
+    icon: CheckCircle2,
+  };
+}
+
+/**
+ * Calculates human-friendly relative time
  */
 function getRelativeTimeLabel(dateStr: string): string {
   try {
@@ -76,132 +183,182 @@ function getRelativeTimeLabel(dateStr: string): string {
   }
 }
 
-export default function CentralWeeklyReviewDashboard() {
+export default function LifeLedgerPage() {
   const [period, setPeriod] = useState<"7" | "30" | "all">("7");
-  const [items, setItems] = useState<DigestItem[]>([]);
+  const [activeTextureFilter, setActiveTextureFilter] = useState<string | null>(null);
+  const [items, setItems] = useState<LedgerItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Quick Dump state
+  // Quick Input state
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDumpExpanded, setIsDumpExpanded] = useState(true);
-  const [justDumpedMessage, setJustDumpedMessage] = useState<string | null>(null);
+  const [justLoggedMessage, setJustLoggedMessage] = useState<string | null>(null);
 
-  // Load Review Items
-  const loadReviewData = async () => {
+  // 6-Month Horizon Calculation
+  const horizonStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-11
+    // Cycle 1: Jan 1 - Jun 30, Cycle 2: Jul 1 - Dec 31
+    const cycleStart = new Date(now.getFullYear(), currentMonth < 6 ? 0 : 6, 1);
+    const cycleEnd = new Date(now.getFullYear(), currentMonth < 6 ? 5 : 11, currentMonth < 6 ? 30 : 31);
+    const totalDays = differenceInDays(cycleEnd, cycleStart) + 1;
+    const daysElapsed = Math.min(totalDays, Math.max(1, differenceInDays(now, cycleStart) + 1));
+    const percent = Math.round((daysElapsed / totalDays) * 100);
+    const cycleLabel = currentMonth < 6 ? "H1 (Jan – Jun)" : "H2 (Jul – Dec)";
+    return { daysElapsed, totalDays, percent, cycleLabel };
+  }, []);
+
+  const loadLedgerData = async () => {
     try {
       setLoading(true);
-      const url =
-        period === "all"
-          ? "/api/items"
-          : `/api/items?days=${period}`;
+      const url = period === "all" ? "/api/items" : `/api/items?days=${period}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setItems(data.items || []);
       }
     } catch (err) {
-      console.error("Failed to load review items:", err);
+      console.error("Failed to load ledger items:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadReviewData();
+    loadLedgerData();
   }, [period]);
 
-  // Handle Quick Thought Ingestion
   const handleQuickDump = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || isSubmitting) return;
 
-    const dumpText = content.trim();
+    const raw = content.trim();
     setContent("");
     setIsSubmitting(true);
-    setJustDumpedMessage(null);
+    setJustLoggedMessage(null);
 
     try {
       const res = await fetch("/api/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: dumpText,
+          content: raw,
           currentTime: new Date().toISOString(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to process note");
-      
+      if (!res.ok) throw new Error("Failed to log entry");
       const data = await res.json();
-      setJustDumpedMessage(`Extracted ${data.extractedCount || 1} item(s) and updated your Weekly Review!`);
-      
-      // Reload review items to show fresh accomplishment or learning immediately
-      await loadReviewData();
+      setJustLoggedMessage(`Captured to your Life Ledger!`);
+      await loadLedgerData();
     } catch (error) {
-      console.error("Quick Dump error:", error);
+      console.error("Failed to capture:", error);
     } finally {
       setIsSubmitting(false);
-      setTimeout(() => setJustDumpedMessage(null), 5000);
+      setTimeout(() => setJustLoggedMessage(null), 4000);
     }
   };
 
-  const doneItems = items.filter((i) => i.category === "Done");
-  const learningItems = items.filter((i) => i.category === "Learning");
-  const actionableItems = items.filter(
-    (i) => i.calendar_action && i.calendar_action.is_actionable
-  );
+  // Filter items by active texture filter if set
+  const filteredItems = useMemo(() => {
+    if (!activeTextureFilter) return items;
+    return items.filter((i) => resolveLifeTexture(i).key === activeTextureFilter);
+  }, [items, activeTextureFilter]);
+
+  // Pick a random past memory from > 7 days ago
+  const forgottenMemory = useMemo(() => {
+    const oldOnes = items.filter((i) => {
+      const d = new Date(i.event_timestamp || i.created_at);
+      return differenceInDays(new Date(), d) >= 5;
+    });
+    if (oldOnes.length === 0) return null;
+    return oldOnes[Math.floor(Math.random() * oldOnes.length)];
+  }, [items]);
+
+  const countByTexture = useMemo(() => {
+    const counts: Record<string, number> = {
+      hard_work: 0,
+      quiet_moment: 0,
+      hard_truth: 0,
+      perspective: 0,
+    };
+    items.forEach((i) => {
+      const t = resolveLifeTexture(i).key;
+      if (counts[t] !== undefined) counts[t]++;
+    });
+    return counts;
+  }, [items]);
 
   const today = new Date();
   const startDate = period === "7" ? subDays(today, 7) : period === "30" ? subDays(today, 30) : null;
 
   return (
-    <div className="max-w-6xl mx-auto p-6 md:p-10 pt-12 md:pt-14">
-      {/* Top Header & Context */}
-      <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-pink-100/70 pb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <span className="p-2 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white shadow-[0_4px_12px_rgba(244,63,94,0.25)]">
-              <CalendarDays size={24} />
+    <div className="max-w-4xl mx-auto p-6 md:p-8 pt-10 md:pt-12">
+      {/* 6-Month Horizon Progress Bar (The Urgency & Perspective Engine) */}
+      <div className="mb-8 p-5 bg-white/90 backdrop-blur-md border border-pink-200/70 rounded-3xl shadow-[0_4px_20px_rgba(244,114,182,0.06)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div className="flex items-center gap-2">
+            <Hourglass size={16} className="text-pink-500 animate-pulse" />
+            <span className="text-xs font-extrabold text-zinc-900 tracking-tight">
+              6-Month Horizon ({horizonStats.cycleLabel})
             </span>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-900 tracking-tight">
-              Weekly Review
-            </h1>
+            <span className="text-xs font-semibold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200/50">
+              Day {horizonStats.daysElapsed} of {horizonStats.totalDays} • {horizonStats.percent}% elapsed
+            </span>
           </div>
-          <p className="text-zinc-500 text-sm font-medium ml-1">
-            {startDate ? `${format(startDate, "MMM d")} – ${format(today, "MMM d, yyyy")}` : "All Recorded Timeline"} • Your real wins, insights, and lessons at a glance.
+          <span className="text-[11px] font-medium text-zinc-400 italic">
+            "How much of this week was spent on things that actually matter?"
+          </span>
+        </div>
+        {/* Progress Track */}
+        <div className="w-full bg-pink-100/60 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 h-full rounded-full transition-all duration-1000 ease-out"
+            style={{ width: `${horizonStats.percent}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Header & Sunday Ritual Anchor */}
+      <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-900 tracking-tight flex items-center gap-3">
+            The Life Ledger <Sparkles className="text-pink-500" size={28} />
+          </h1>
+          <p className="text-zinc-500 text-sm font-medium mt-1">
+            {startDate ? `${format(startDate, "MMM d")} – ${format(today, "MMM d, yyyy")}` : "All Moments & Events"} • An unfiltered mirror of your life being lived.
           </p>
         </div>
 
-        {/* Time Period Filter Tabs */}
-        <div className="inline-flex rounded-2xl border border-pink-200/80 bg-white/90 backdrop-blur-md p-1.5 shadow-xs text-xs font-bold self-start md:self-auto">
+        {/* Time Period Filter */}
+        <div className="inline-flex rounded-2xl border border-pink-200/80 bg-white p-1 shadow-2xs text-xs font-bold self-start md:self-auto">
           <button
             onClick={() => setPeriod("7")}
-            className={`px-4 py-2 rounded-xl transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl transition-all ${
               period === "7"
                 ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-900 hover:bg-pink-50/50"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
-            This Week (7d)
+            This Week
           </button>
           <button
             onClick={() => setPeriod("30")}
-            className={`px-4 py-2 rounded-xl transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl transition-all ${
               period === "30"
                 ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-900 hover:bg-pink-50/50"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
-            Last 30 Days
+            30 Days
           </button>
           <button
             onClick={() => setPeriod("all")}
-            className={`px-4 py-2 rounded-xl transition-all ${
+            className={`px-3.5 py-1.5 rounded-xl transition-all ${
               period === "all"
                 ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-xs"
-                : "text-zinc-600 hover:text-zinc-900 hover:bg-pink-50/50"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
             All Time
@@ -209,246 +366,203 @@ export default function CentralWeeklyReviewDashboard() {
         </div>
       </header>
 
-      {/* Metrics Highlights Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-200/80 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
-          <div>
-            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Accomplishments</p>
-            <p className="text-2xl font-black text-emerald-950 mt-0.5">{doneItems.length}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100/90 text-emerald-700 flex items-center justify-center font-bold">
-            <CheckCircle2 size={20} />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-pink-500/10 to-rose-500/5 border border-pink-200/80 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
-          <div>
-            <p className="text-xs font-bold text-pink-800 uppercase tracking-wider">Learnings & Insights</p>
-            <p className="text-2xl font-black text-pink-950 mt-0.5">{learningItems.length}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-pink-100/90 text-pink-700 flex items-center justify-center font-bold">
-            <BookOpen size={20} />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-200/80 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
-          <div>
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Upcoming Tasks</p>
-            <p className="text-2xl font-black text-amber-950 mt-0.5">{actionableItems.length}</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-100/90 text-amber-700 flex items-center justify-center font-bold">
-            <Calendar size={20} />
-          </div>
-        </div>
-      </div>
-
-      {/* Central Quick Capture Box (Integrated Directly into Dashboard) */}
-      <div className="mb-10 bg-white/90 backdrop-blur-xl border border-pink-200/80 rounded-3xl p-5 shadow-[0_8px_30px_rgba(244,114,182,0.08)]">
-        <div className="flex items-center justify-between mb-3 cursor-pointer" onClick={() => setIsDumpExpanded(!isDumpExpanded)}>
-          <div className="flex items-center gap-2">
-            <Sparkles className="text-pink-500" size={18} />
-            <h2 className="text-sm font-bold text-zinc-800">
-              Quick Capture <span className="text-xs font-normal text-zinc-400">— Log a win, insight, or task</span>
-            </h2>
-          </div>
-          <button className="text-zinc-400 hover:text-zinc-600 p-1">
-            {isDumpExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-        </div>
-
-        <AnimatePresence>
-          {isDumpExpanded && (
-            <motion.form
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              onSubmit={handleQuickDump}
-              className="flex flex-col gap-3"
+      {/* Unified Input Bar: "What happened today worth remembering?" */}
+      <div className="mb-10">
+        <form
+          onSubmit={handleQuickDump}
+          className="relative bg-white/95 backdrop-blur-xl border border-pink-200 rounded-3xl p-5 shadow-[0_10px_35px_rgba(244,114,182,0.12)] focus-within:ring-4 focus-within:ring-pink-100/70 transition-all"
+        >
+          <label className="block text-xs font-extrabold uppercase tracking-wider text-pink-700 mb-2">
+            What happened today worth remembering?
+          </label>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Log a win, a hard day, an expense, a conversation, or a lesson (e.g. 'Met Rohan for coffee', 'Lost 1.5k trading today', 'Finished the Django assignment')..."
+            className="w-full bg-pink-50/30 text-zinc-900 border border-pink-100/70 rounded-2xl p-4 text-sm font-medium focus:outline-none focus:bg-white transition-all resize-none min-h-[90px] placeholder:text-zinc-400"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                handleQuickDump(e);
+              }
+            }}
+          />
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-[11px] text-zinc-400 font-medium">
+              Zero syntax required • AI classifies life texture automatically
+            </span>
+            <button
+              type="submit"
+              disabled={!content.trim() || isSubmitting}
+              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold px-6 py-2.5 rounded-xl flex items-center gap-2 hover:opacity-95 shadow-xs disabled:opacity-50 transition-all active:scale-[0.98]"
             >
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="What did you complete or learn? (e.g. 'Finished the Next.js migration yesterday', 'Learned about vector embeddings', 'Call Rohan tomorrow at 4 PM')..."
-                className="w-full bg-pink-50/40 text-zinc-900 border border-pink-100 rounded-2xl p-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-pink-300 focus:bg-white transition-all resize-none min-h-[90px] placeholder:text-zinc-400"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    handleQuickDump(e);
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-zinc-400 font-medium">
-                  Press <kbd className="font-mono bg-zinc-100 border px-1 rounded text-zinc-600">Cmd/Ctrl</kbd> + <kbd className="font-mono bg-zinc-100 border px-1 rounded text-zinc-600">Enter</kbd> to save
-                </span>
-                <button
-                  type="submit"
-                  disabled={!content.trim() || isSubmitting}
-                  className="bg-gradient-to-r from-pink-500 to-rose-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 hover:opacity-95 shadow-xs disabled:opacity-50 transition-all active:scale-[0.98]"
-                >
-                  {isSubmitting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                  <span>Add to Review</span>
-                </button>
-              </div>
-            </motion.form>
-          )}
-        </AnimatePresence>
+              {isSubmitting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
+              <span>Log Moment</span>
+            </button>
+          </div>
+        </form>
 
-        {justDumpedMessage && (
+        {justLoggedMessage && (
           <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2">
             <CheckCircle2 size={14} className="text-emerald-600" />
-            <span>{justDumpedMessage}</span>
+            <span>{justLoggedMessage}</span>
           </div>
         )}
       </div>
 
-      {/* Main Review Content Columns */}
+      {/* Surfacing the Forgotten: Randomized Recall Memory Card */}
+      {forgottenMemory && (
+        <div className="mb-8 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-amber-500/5 border border-purple-200/80 rounded-3xl p-5 shadow-xs">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <Compass className="text-purple-600" size={16} />
+              <span className="text-xs font-bold text-purple-900 uppercase tracking-wider">
+                Memory From The Past
+              </span>
+            </div>
+            <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+              {getRelativeTimeLabel(forgottenMemory.event_timestamp || forgottenMemory.created_at)}
+            </span>
+          </div>
+          <p className="text-zinc-800 text-sm font-semibold italic mt-2 leading-relaxed">
+            "{forgottenMemory.content}"
+          </p>
+        </div>
+      )}
+
+      {/* Texture Filter Pills */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <button
+          onClick={() => setActiveTextureFilter(null)}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            activeTextureFilter === null
+              ? "bg-zinc-900 text-white"
+              : "bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200"
+          }`}
+        >
+          All Textures ({items.length})
+        </button>
+        <button
+          onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_work" ? null : "hard_work")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            activeTextureFilter === "hard_work"
+              ? "bg-emerald-600 text-white"
+              : "bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200"
+          }`}
+        >
+          🔨 Hard Work ({countByTexture.hard_work})
+        </button>
+        <button
+          onClick={() => setActiveTextureFilter(activeTextureFilter === "quiet_moment" ? null : "quiet_moment")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            activeTextureFilter === "quiet_moment"
+              ? "bg-purple-600 text-white"
+              : "bg-white text-purple-800 hover:bg-purple-50 border border-purple-200"
+          }`}
+        >
+          🍃 Quiet Moments ({countByTexture.quiet_moment})
+        </button>
+        <button
+          onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_truth" ? null : "hard_truth")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            activeTextureFilter === "hard_truth"
+              ? "bg-amber-600 text-white"
+              : "bg-white text-amber-800 hover:bg-amber-50 border border-amber-200"
+          }`}
+        >
+          ⚖️ Costs & Truths ({countByTexture.hard_truth})
+        </button>
+        <button
+          onClick={() => setActiveTextureFilter(activeTextureFilter === "perspective" ? null : "perspective")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            activeTextureFilter === "perspective"
+              ? "bg-pink-600 text-white"
+              : "bg-white text-pink-800 hover:bg-pink-50 border border-pink-200"
+          }`}
+        >
+          🧠 Perspectives ({countByTexture.perspective})
+        </button>
+
+        <Link
+          href="/digest"
+          className="ml-auto inline-flex items-center gap-1.5 text-xs font-bold text-pink-600 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-xl border border-pink-200/80"
+        >
+          <span>Sunday Digest Ritual</span>
+          <ArrowRight size={12} />
+        </Link>
+      </div>
+
+      {/* The Ambient Life Ledger Feed */}
       {loading ? (
         <div className="py-24 flex justify-center items-center">
           <Loader2 className="animate-spin text-pink-500" size={36} />
         </div>
-      ) : doneItems.length === 0 && learningItems.length === 0 && actionableItems.length === 0 ? (
-        <div className="text-center py-20 border-2 border-dashed border-pink-200/80 rounded-3xl bg-white/60 p-10">
-          <Flame className="mx-auto text-pink-400 mb-3" size={36} />
-          <h3 className="text-lg font-bold text-zinc-800 mb-1">No activity logged for this timeframe</h3>
-          <p className="text-zinc-500 text-sm max-w-md mx-auto mb-6">
-            Log what you've accomplished or insights you've gained in the Quick Capture box above, and they will automatically populate your review.
+      ) : filteredItems.length === 0 ? (
+        <div className="text-center py-20 border-2 border-dashed border-pink-200/80 rounded-3xl bg-white/60 p-8">
+          <Flame className="mx-auto text-pink-400 mb-2" size={32} />
+          <h3 className="text-base font-bold text-zinc-800">Your ledger is waiting</h3>
+          <p className="text-zinc-500 text-xs mt-1">
+            Log your daily micro-moments, wins, or lessons in the box above.
           </p>
         </div>
       ) : (
-        <div className="space-y-10">
-          {/* Actionable / Calendar Tasks Section (if any exists) */}
-          {actionableItems.length > 0 && (
-            <section className="bg-gradient-to-br from-rose-50/60 to-pink-50/40 border border-rose-200/70 rounded-3xl p-6 shadow-xs">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold flex items-center gap-2 text-zinc-900">
-                  <Calendar className="text-rose-500" size={20} /> Upcoming Deadlines & Tasks
-                </h2>
-                <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200">
-                  {actionableItems.length}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {actionableItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white border border-rose-200/80 p-4 rounded-2xl flex flex-col justify-between gap-3 shadow-2xs"
+        <div className="space-y-3.5">
+          {filteredItems.map((item) => {
+            const texture = resolveLifeTexture(item);
+            const Icon = texture.icon;
+            return (
+              <div
+                key={item.id}
+                className={`bg-white border ${texture.borderClass} p-5 rounded-2xl flex flex-col gap-2 relative overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_18px_rgba(244,114,182,0.1)] transition-all`}
+              >
+                {/* Texture Left Accent Bar */}
+                <div className={`absolute top-0 left-0 w-2 h-full ${texture.bgAccent} rounded-l-2xl`}></div>
+
+                {/* Top Row: Texture Label + Time */}
+                <div className="flex items-center justify-between ml-2">
+                  <span
+                    className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md border flex items-center gap-1.5 ${texture.textAccent}`}
                   >
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/60">
-                        {item.calendar_action?.title || "Scheduled Action"}
-                      </span>
-                      <p className="text-zinc-900 font-semibold text-sm mt-2 leading-relaxed">{item.content}</p>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-rose-100/60">
-                      <span className="text-xs text-zinc-500 font-medium">
-                        {item.calendar_action?.start_time
-                          ? format(new Date(item.calendar_action.start_time), "MMM d • h:mm a")
-                          : getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                      </span>
-                      <a
-                        href={generateGoogleCalendarUrl(item.calendar_action!, item.content)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 px-3 py-1.5 rounded-xl shadow-xs transition-all"
+                    <Icon size={12} />
+                    {texture.label}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-semibold">
+                    {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
+                  </span>
+                </div>
+
+                {/* Content */}
+                <p className="text-zinc-900 font-semibold text-[15px] leading-relaxed ml-2">
+                  {item.content}
+                </p>
+
+                {/* Bottom Row: Tags & Google Calendar (if actionable) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 ml-2 mt-1 pt-2 border-t border-zinc-100">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {item.tags?.map((t) => (
+                      <span
+                        key={t}
+                        className="text-[11px] bg-zinc-100 text-zinc-600 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60"
                       >
-                        <Calendar size={12} />
-                        Add to Calendar
-                      </a>
-                    </div>
+                        #{t}
+                      </span>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
 
-          {/* Two-Column Accomplishments & Learnings Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-            {/* Column 1: Accomplishments */}
-            <section className="flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900">
-                  <CheckCircle2 className="text-emerald-500" size={22} /> What You Accomplished
-                </h2>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  {doneItems.length}
-                </span>
-              </div>
-              <div className="grid gap-3">
-                {doneItems.length === 0 ? (
-                  <div className="text-center py-10 border-2 border-dashed border-emerald-100 rounded-2xl bg-white/50 p-6">
-                    <p className="text-xs text-zinc-400 font-medium">No completed tasks recorded for this timeframe.</p>
-                  </div>
-                ) : (
-                  doneItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="bg-white border border-emerald-200/80 p-5 rounded-2xl flex flex-col gap-2 relative overflow-hidden shadow-[0_2px_10px_rgba(16,185,129,0.06)] hover:shadow-[0_4px_16px_rgba(16,185,129,0.12)] transition-all"
+                  {item.calendar_action && item.calendar_action.is_actionable && (
+                    <a
+                      href={generateGoogleCalendarUrl(item.calendar_action, item.content)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 px-3 py-1 rounded-lg shadow-2xs transition-all"
                     >
-                      <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500 rounded-l-2xl"></div>
-                      <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
-                      <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                        <span
-                          title={format(new Date(item.event_timestamp || item.created_at), "EEEE, MMMM d, yyyy • h:mm a")}
-                          className="text-xs text-emerald-800 font-semibold bg-emerald-50/90 px-2.5 py-1 rounded-lg border border-emerald-200/60 shadow-2xs flex items-center gap-1.5"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                        </span>
-                        {item.tags?.map((t) => (
-                          <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )}
+                      <Calendar size={12} />
+                      Add to Google Calendar
+                    </a>
+                  )}
+                </div>
               </div>
-            </section>
-
-            {/* Column 2: What You Learned */}
-            <section className="flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900">
-                  <BookOpen className="text-pink-500" size={22} /> What You Learned
-                </h2>
-                <span className="text-xs font-bold text-pink-700 bg-pink-100 px-2.5 py-0.5 rounded-full border border-pink-200">
-                  {learningItems.length}
-                </span>
-              </div>
-              <div className="grid gap-3">
-                {learningItems.length === 0 ? (
-                  <div className="text-center py-10 border-2 border-dashed border-pink-100 rounded-2xl bg-white/50 p-6">
-                    <p className="text-xs text-zinc-400 font-medium">No learning or insight items recorded for this timeframe.</p>
-                  </div>
-                ) : (
-                  learningItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="bg-white border border-pink-200/80 p-5 rounded-2xl flex flex-col gap-2 relative overflow-hidden shadow-[0_2px_10px_rgba(244,114,182,0.08)] hover:shadow-[0_4px_16px_rgba(244,114,182,0.14)] transition-all"
-                    >
-                      <div className="absolute top-0 left-0 w-2 h-full bg-pink-500 rounded-l-2xl"></div>
-                      <p className="text-zinc-900 leading-relaxed font-semibold ml-2 text-[15px]">{item.content}</p>
-                      <div className="flex flex-wrap items-center gap-2 ml-2 mt-1">
-                        <span
-                          title={format(new Date(item.event_timestamp || item.created_at), "EEEE, MMMM d, yyyy • h:mm a")}
-                          className="text-xs text-pink-800 font-semibold bg-pink-50/90 px-2.5 py-1 rounded-lg border border-pink-200/60 shadow-2xs flex items-center gap-1.5"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-pink-500" />
-                          {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                        </span>
-                        {item.tags?.map((t) => (
-                          <span key={t} className="text-[11px] bg-zinc-100 text-zinc-700 font-medium px-2 py-0.5 rounded-md border border-zinc-200/60">
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
+            );
+          })}
         </div>
       )}
     </div>

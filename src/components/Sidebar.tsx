@@ -7,10 +7,11 @@ import {
   PenLine, 
   Network, 
   CalendarDays, 
-  Folders,
-  Calendar,
-  CheckCircle2,
-  ExternalLink
+  Folders, 
+  Calendar, 
+  CheckCircle2, 
+  ExternalLink,
+  BookOpen
 } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -20,7 +21,8 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 const navItems = [
-  { name: "Weekly Review", href: "/", icon: CalendarDays },
+  { name: "Life Ledger", href: "/", icon: CalendarDays },
+  { name: "Sunday Review", href: "/digest", icon: BookOpen },
   { name: "Brain Graph", href: "/graph", icon: Network },
   { name: "Clusters & Search", href: "/clusters", icon: Folders },
 ];
