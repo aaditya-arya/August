@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Write - Keep Sync</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        <span class="logo-text">Write</span>
+      </div>
+      <span class="badge">Keep Exporter</span>
+    </div>
+
+    <div class="content">
+      <p class="description">
+        Instantly scrape all your Google Keep notes from this browser tab and import them directly into Write. Zero copy-pasting.
+      </p>
+
+      <div class="target-box">
+        <label>Destination API:</label>
+        <input type="text" id="apiUrl" value="http://localhost:3000/api/import/keep" />
+      </div>
+
+      <button id="syncBtn" class="btn-primary">
+        ⚡ Scrape & Sync All Keep Notes
+      </button>
+
+      <div id="statusBox" class="status-box hidden">
+        <div id="statusSpinner" class="spinner"></div>
+        <p id="statusText">Scanning Keep cards...</p>
+      </div>
+
+      <div id="resultBox" class="result-box hidden">
+        <div class="result-stat">
+          <span class="stat-number" id="scrapedCount">0</span>
+          <span class="stat-label">Cards Scraped</span>
+        </div>
+        <div class="result-stat">
+          <span class="stat-number" id="extractedCount">0</span>
+          <span class="stat-label">AI Items Extracted</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

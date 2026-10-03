@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Write - Google Keep Sync",
+  "version": "1.0.0",
+  "description": "1-Click DOM Scraper to import all Google Keep notes directly into Write with zero copy-pasting.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://keep.google.com/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Sync Keep to Write"
+  }
+}

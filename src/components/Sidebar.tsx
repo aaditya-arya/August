@@ -20,10 +20,9 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 const navItems = [
-  { name: "Quick Dump", href: "/", icon: PenLine },
+  { name: "Weekly Review", href: "/", icon: CalendarDays },
   { name: "Brain Graph", href: "/graph", icon: Network },
-  { name: "Weekly Digest", href: "/digest", icon: CalendarDays },
-  { name: "Clusters", href: "/clusters", icon: Folders },
+  { name: "Clusters & Search", href: "/clusters", icon: Folders },
 ];
 
 export function Sidebar() {
