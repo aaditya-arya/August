@@ -56,18 +56,25 @@ export function resolveLifeTexture(item: LedgerItem): {
 } {
   const c = (item.category || "").toLowerCase();
   const texture = (item.life_texture || "").toLowerCase();
+  const content = (item.content || "").toLowerCase();
+  const tags = (item.tags || []).map((t) => t.toLowerCase());
   const isActionable = Boolean(item.calendar_action?.is_actionable);
 
-  // 1. TIME-FIRST EVALUATION: Actionable Obligations, Tasks, Reminders, and Events
+  // 1. TIME-FIRST EVALUATION: Actionable Obligations, Tasks, Reminders, and Scheduled Events
   if (
     isActionable ||
     texture === "actionable_obligation" ||
     c === "task" ||
     c === "reminder" ||
-    c === "event"
+    c === "event" ||
+    content.includes("call today") ||
+    content.includes("call tomorrow") ||
+    content.includes("appointment") ||
+    content.includes("event on ") ||
+    content.includes("orientation on ")
   ) {
-    const isEvent = c === "event" || (item.content || "").toLowerCase().includes("event") || (item.content || "").toLowerCase().includes("orientation");
-    const isReminder = c === "reminder" || (item.content || "").toLowerCase().includes("call") || (item.content || "").toLowerCase().includes("remind");
+    const isEvent = c === "event" || content.includes("event") || content.includes("orientation");
+    const isReminder = c === "reminder" || content.includes("call") || content.includes("remind");
     return {
       key: "actionable_obligation",
       label: isEvent ? "Scheduled Event" : isReminder ? "Call & Reminder" : "Actionable Task",
@@ -78,45 +85,29 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 2. Media Consumption (Music, songs, trailers, movies, games, anime)
-  if (
-    texture === "media_log" ||
-    c === "media_log" ||
-    c === "media"
-  ) {
-    return {
-      key: "media_log",
-      label: "Media & Intake",
-      borderClass: "border-indigo-400/60 hover:border-indigo-500",
-      bgAccent: "bg-indigo-600",
-      textAccent: "text-indigo-900 bg-indigo-100/90 border-indigo-300/60",
-      icon: Headphones,
-    };
-  }
-
-  // 3. Ideas, Wishlists & Desires (Uncompleted intentions, things to buy/read)
-  if (
-    texture === "idea_spark" ||
-    c === "idea_desire" ||
-    c === "idea" ||
-    c === "wishlist"
-  ) {
-    return {
-      key: "idea_spark",
-      label: "Idea & Wishlist",
-      borderClass: "border-violet-300/80 hover:border-violet-400",
-      bgAccent: "bg-violet-500",
-      textAccent: "text-violet-900 bg-violet-100/90 border-violet-300/60",
-      icon: Sparkle,
-    };
-  }
-
-  // 4. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
-  if (
+  // 2. Cost & Hard Truths (Trading losses, financial hits, bills, expenses, failures, tough days)
+  const isFinancialOrSetback =
     texture === "hard_truth" ||
     c === "hard_truth" ||
-    c.includes("truth")
-  ) {
+    c.includes("truth") ||
+    c === "loss" ||
+    tags.includes("trading") ||
+    tags.includes("finance") ||
+    tags.includes("expense") ||
+    tags.includes("bills") ||
+    tags.includes("financial_loss") ||
+    tags.includes("setback") ||
+    content.includes("lost massively") ||
+    content.includes("loose it all") ||
+    content.includes("lost ") ||
+    content.includes("worst day") ||
+    content.includes("bought groceries") ||
+    content.includes("paid bill") ||
+    content.includes("pay the wifi bill") ||
+    content.includes("wifi bill") ||
+    content.includes("failed");
+
+  if (isFinancialOrSetback) {
     return {
       key: "hard_truth",
       label: "Hard Truth & Cost",
@@ -127,13 +118,80 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
+  // 3. Media Consumption (Music, cinema, anime, gaming, trailers, podcast)
+  const isMedia =
+    texture === "media_log" ||
+    c === "media_log" ||
+    c === "media" ||
+    tags.includes("music") ||
+    tags.includes("movies") ||
+    tags.includes("gaming") ||
+    tags.includes("song") ||
+    tags.includes("radio") ||
+    tags.includes("pop") ||
+    tags.includes("bollywood") ||
+    tags.includes("trailers") ||
+    tags.includes("watchlist") ||
+    content.includes("heard \"") ||
+    content.includes("listening to") ||
+    content.includes("movie trailer") ||
+    content.includes("play the airbase") ||
+    content.includes("walkthrough") ||
+    content.includes("watched ");
+
+  if (isMedia) {
+    return {
+      key: "media_log",
+      label: "Media & Intake",
+      borderClass: "border-indigo-400/60 hover:border-indigo-500",
+      bgAccent: "bg-indigo-600",
+      textAccent: "text-indigo-900 bg-indigo-100/90 border-indigo-300/60",
+      icon: Headphones,
+    };
+  }
+
+  // 4. Ideas, Wishlists & Desires (Timeless desires, things to buy/read/try, uncompleted goals)
+  const isIdeaOrWishlist =
+    texture === "idea_spark" ||
+    c === "idea_desire" ||
+    c === "idea" ||
+    c === "wishlist" ||
+    tags.includes("wishlist") ||
+    tags.includes("shopping") ||
+    content.startsWith("want to") ||
+    content.startsWith("wish i") ||
+    content.startsWith("idea for") ||
+    content.startsWith("thinking of") ||
+    content.startsWith("should add") ||
+    content.startsWith("need to buy") ||
+    content.startsWith("need to get") ||
+    content.startsWith("need to call") ||
+    content.startsWith("need to write") ||
+    content.startsWith("need to renew");
+
+  if (isIdeaOrWishlist) {
+    return {
+      key: "idea_spark",
+      label: "Idea & Wishlist",
+      borderClass: "border-violet-300/80 hover:border-violet-400",
+      bgAccent: "bg-violet-500",
+      textAccent: "text-violet-900 bg-violet-100/90 border-violet-300/60",
+      icon: Sparkle,
+    };
+  }
+
   // 5. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
-  if (
+  const isPerspective =
     texture === "perspective" ||
     c === "perspective" ||
     c === "perspective_lesson" ||
-    c === "learning"
-  ) {
+    c === "learning" ||
+    tags.includes("philosophy") ||
+    tags.includes("wisdom") ||
+    tags.includes("self-improvement") ||
+    content.includes("reading \"deep work\"");
+
+  if (isPerspective) {
     return {
       key: "perspective",
       label: "Perspective & Insight",
@@ -144,29 +202,22 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 6. Quiet Moments (Past micro-moments, quiet walks, small joys, music, conversations)
-  if (
-    texture === "quiet_moment" ||
-    c === "quiet_moment" ||
-    c === "shaairi_quote"
-  ) {
-    return {
-      key: "quiet_moment",
-      label: "Quiet Moment",
-      borderClass: "border-purple-300/80 hover:border-purple-400",
-      bgAccent: "bg-purple-500",
-      textAccent: "text-purple-900 bg-purple-100/90 border-purple-300/60",
-      icon: Coffee,
-    };
-  }
-
-  // 7. Hard Work & Real Milestones (ONLY difficult completed achievements)
-  if (
+  // 6. Hard Work & Real Milestones (ONLY genuine completed past achievements)
+  const isCompletedMilestone =
     texture === "hard_work" ||
     c === "milestone_hardwork" ||
     c === "hard_work" ||
-    c === "done"
-  ) {
+    c === "milestone" ||
+    (c === "done" && (
+      content.includes("finished") ||
+      content.includes("wrapped up") ||
+      content.includes("cleared") ||
+      content.includes("submitted") ||
+      content.includes("shipped") ||
+      content.includes("completed")
+    ));
+
+  if (isCompletedMilestone) {
     return {
       key: "hard_work",
       label: "Milestone & Achievement",
@@ -177,10 +228,10 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // Default fallback for general thoughts
+  // 7. Quiet Moments (Default fallback for reflections, poems, micro-moments)
   return {
     key: "quiet_moment",
-    label: "Life Note",
+    label: "Quiet Moment",
     borderClass: "border-purple-300/80 hover:border-purple-400",
     bgAccent: "bg-purple-500",
     textAccent: "text-purple-900 bg-purple-100/90 border-purple-300/60",
@@ -552,46 +603,54 @@ export default function LifeLedgerPage() {
             ✨ Ideas & Wishlist ({countByTexture.idea_spark})
           </button>
         )}
-        <button
-          onClick={() => setActiveTextureFilter(activeTextureFilter === "quiet_moment" ? null : "quiet_moment")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeTextureFilter === "quiet_moment"
-              ? "bg-purple-600 text-white"
-              : "bg-white text-purple-800 hover:bg-purple-50 border border-purple-200"
-          }`}
-        >
-          🍃 Quiet Moments ({countByTexture.quiet_moment})
-        </button>
-        <button
-          onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_truth" ? null : "hard_truth")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeTextureFilter === "hard_truth"
-              ? "bg-amber-600 text-white"
-              : "bg-white text-amber-800 hover:bg-amber-50 border border-amber-200"
-          }`}
-        >
-          ⚖️ Costs & Truths ({countByTexture.hard_truth})
-        </button>
-        <button
-          onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_work" ? null : "hard_work")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeTextureFilter === "hard_work"
-              ? "bg-emerald-600 text-white"
-              : "bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200"
-          }`}
-        >
-          🔨 Milestones ({countByTexture.hard_work})
-        </button>
-        <button
-          onClick={() => setActiveTextureFilter(activeTextureFilter === "perspective" ? null : "perspective")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeTextureFilter === "perspective"
-              ? "bg-rose-600 text-white"
-              : "bg-white text-rose-800 hover:bg-rose-50 border border-rose-200"
-          }`}
-        >
-          🧠 Perspectives ({countByTexture.perspective})
-        </button>
+        {countByTexture.quiet_moment > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "quiet_moment" ? null : "quiet_moment")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "quiet_moment"
+                ? "bg-purple-600 text-white"
+                : "bg-white text-purple-800 hover:bg-purple-50 border border-purple-200"
+            }`}
+          >
+            🍃 Quiet Moments ({countByTexture.quiet_moment})
+          </button>
+        )}
+        {countByTexture.hard_truth > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_truth" ? null : "hard_truth")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "hard_truth"
+                ? "bg-amber-600 text-white"
+                : "bg-white text-amber-800 hover:bg-amber-50 border border-amber-200"
+            }`}
+          >
+            ⚖️ Costs & Truths ({countByTexture.hard_truth})
+          </button>
+        )}
+        {countByTexture.hard_work > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "hard_work" ? null : "hard_work")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "hard_work"
+                ? "bg-emerald-600 text-white"
+                : "bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200"
+            }`}
+          >
+            🔨 Milestones ({countByTexture.hard_work})
+          </button>
+        )}
+        {countByTexture.perspective > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "perspective" ? null : "perspective")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "perspective"
+                ? "bg-rose-600 text-white"
+                : "bg-white text-rose-800 hover:bg-rose-50 border border-rose-200"
+            }`}
+          >
+            🧠 Perspectives ({countByTexture.perspective})
+          </button>
+        )}
 
         <Link
           href="/digest"

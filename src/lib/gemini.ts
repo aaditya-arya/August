@@ -80,8 +80,8 @@ export async function extractItems(
   context?: { currentTime?: string; timezone?: string }
 ) {
   const candidateModels = [
-    "gemini-3-flash-preview",
-    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-3.8-flash",
   ];
 
   const nowIso = context?.currentTime || new Date().toISOString();
@@ -225,8 +225,8 @@ export async function generateWeeklySynthesis(
   }
 
   const candidateModels = [
-    "gemini-3-flash-preview",
-    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-3.8-flash",
   ];
 
   const formattedItems = items
