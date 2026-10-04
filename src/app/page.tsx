@@ -16,7 +16,8 @@ import {
   Coffee,
   Sparkle,
   ArrowRight,
-  Quote
+  Quote,
+  Headphones
 } from "lucide-react";
 import { format, subDays, differenceInDays } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
@@ -46,7 +47,7 @@ export type LedgerItem = {
  * Maps raw category or content into an authentic Life Texture
  */
 export function resolveLifeTexture(item: LedgerItem): {
-  key: "actionable_obligation" | "hard_work" | "quiet_moment" | "hard_truth" | "perspective" | "idea_spark";
+  key: "actionable_obligation" | "media_log" | "idea_spark" | "hard_truth" | "hard_work" | "perspective" | "quiet_moment";
   label: string;
   borderClass: string;
   bgAccent: string;
@@ -77,7 +78,40 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 2. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
+  // 2. Media Consumption (Music, songs, trailers, movies, games, anime)
+  if (
+    texture === "media_log" ||
+    c === "media_log" ||
+    c === "media"
+  ) {
+    return {
+      key: "media_log",
+      label: "Media & Intake",
+      borderClass: "border-indigo-400/60 hover:border-indigo-500",
+      bgAccent: "bg-indigo-600",
+      textAccent: "text-indigo-900 bg-indigo-100/90 border-indigo-300/60",
+      icon: Headphones,
+    };
+  }
+
+  // 3. Ideas, Wishlists & Desires (Uncompleted intentions, things to buy/read)
+  if (
+    texture === "idea_spark" ||
+    c === "idea_desire" ||
+    c === "idea" ||
+    c === "wishlist"
+  ) {
+    return {
+      key: "idea_spark",
+      label: "Idea & Wishlist",
+      borderClass: "border-violet-300/80 hover:border-violet-400",
+      bgAccent: "bg-violet-500",
+      textAccent: "text-violet-900 bg-violet-100/90 border-violet-300/60",
+      icon: Sparkle,
+    };
+  }
+
+  // 4. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
   if (
     texture === "hard_truth" ||
     c === "hard_truth" ||
@@ -93,7 +127,7 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 3. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
+  // 5. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
   if (
     texture === "perspective" ||
     c === "perspective" ||
@@ -110,11 +144,10 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 4. Quiet Moments (Past micro-moments, quiet walks, small joys, music, conversations)
+  // 6. Quiet Moments (Past micro-moments, quiet walks, small joys, music, conversations)
   if (
     texture === "quiet_moment" ||
     c === "quiet_moment" ||
-    c === "media" ||
     c === "shaairi_quote"
   ) {
     return {
@@ -127,20 +160,13 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 5. Ideas & Sparks
-  if (texture === "idea_spark" || c === "idea_desire" || c === "idea" || c === "wishlist") {
-    return {
-      key: "idea_spark",
-      label: "Idea & Desire",
-      borderClass: "border-blue-300/80 hover:border-blue-400",
-      bgAccent: "bg-blue-500",
-      textAccent: "text-blue-900 bg-blue-100/90 border-blue-300/60",
-      icon: Sparkle,
-    };
-  }
-
-  // 6. Hard Work & Real Milestones
-  if (texture === "hard_work" || c === "milestone_hardwork" || c === "hard_work" || c === "done") {
+  // 7. Hard Work & Real Milestones (ONLY difficult completed achievements)
+  if (
+    texture === "hard_work" ||
+    c === "milestone_hardwork" ||
+    c === "hard_work" ||
+    c === "done"
+  ) {
     return {
       key: "hard_work",
       label: "Milestone & Achievement",
@@ -296,6 +322,8 @@ export default function LifeLedgerPage() {
   const countByTexture = useMemo(() => {
     const counts: Record<string, number> = {
       actionable_obligation: 0,
+      media_log: 0,
+      idea_spark: 0,
       hard_work: 0,
       quiet_moment: 0,
       hard_truth: 0,
@@ -424,7 +452,7 @@ export default function LifeLedgerPage() {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Log an upcoming task, a past memory, a quiet walk, an expense, or a lesson (e.g. 'Call Rohit at 4 PM', 'MBA event on Oct 13', 'Met a new friend for coffee', 'Lost 1.5k trading')..."
+            placeholder="Log an upcoming task, a song/movie, a wishlist item, a quiet walk, an expense, or a lesson (e.g. 'Heard Starboy', 'Want to start Ikigai', 'Call Rohit at 4 PM', 'Lost 1.5k trading', 'Finished final thesis')..."
             className="w-full bg-rose-50/20 text-zinc-900 border border-rose-100 rounded-2xl p-4 text-sm md:text-base font-normal focus:outline-none focus:bg-white transition-all resize-none min-h-[95px] placeholder:text-zinc-400"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -498,6 +526,30 @@ export default function LifeLedgerPage() {
             }`}
           >
             📅 Tasks & Events ({countByTexture.actionable_obligation})
+          </button>
+        )}
+        {countByTexture.media_log > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "media_log" ? null : "media_log")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "media_log"
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-indigo-800 hover:bg-indigo-50 border border-indigo-200"
+            }`}
+          >
+            🎧 Media & Intake ({countByTexture.media_log})
+          </button>
+        )}
+        {countByTexture.idea_spark > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "idea_spark" ? null : "idea_spark")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "idea_spark"
+                ? "bg-violet-600 text-white"
+                : "bg-white text-violet-800 hover:bg-violet-50 border border-violet-200"
+            }`}
+          >
+            ✨ Ideas & Wishlist ({countByTexture.idea_spark})
           </button>
         )}
         <button
@@ -612,6 +664,68 @@ export default function LifeLedgerPage() {
                       </a>
                     )}
                   </div>
+                </div>
+              );
+            }
+
+            // TREATMENT: MEDIA LOG (Songs, movies, trailers, gaming, media consumption)
+            if (texture.key === "media_log") {
+              return (
+                <div
+                  key={item.id}
+                  className="p-5 md:p-6 rounded-2xl bg-[#11121c] text-indigo-100 border border-indigo-500/25 shadow-md hover:border-indigo-400/50 transition-all flex flex-col justify-between group relative overflow-hidden"
+                >
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-indigo-500/20">
+                    <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-md border border-indigo-400/30 flex items-center gap-1.5">
+                      <Headphones size={12} className="text-indigo-400" /> Media & Intake
+                    </span>
+                    <span className="text-xs text-indigo-400/70 font-mono">
+                      {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-indigo-50 font-medium text-base leading-relaxed mb-3">
+                    {item.content}
+                  </p>
+                  {item.tags && item.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-indigo-500/15">
+                      {item.tags.map((t) => (
+                        <span key={t} className="text-[10px] font-mono bg-indigo-950/60 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // TREATMENT: IDEA & DESIRE (Wishlists, uncompleted intentions, creative concepts)
+            if (texture.key === "idea_spark") {
+              return (
+                <div
+                  key={item.id}
+                  className="p-6 rounded-2xl bg-gradient-to-br from-violet-50/80 via-white to-pink-50/40 border border-violet-200/80 shadow-xs hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200 flex items-center gap-1.5">
+                      <Sparkle size={12} className="text-violet-600" /> Idea & Wishlist
+                    </span>
+                    <span className="text-xs text-zinc-400 font-medium">
+                      {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
+                    </span>
+                  </div>
+                  <p className="font-sans font-semibold text-violet-950 text-base leading-relaxed">
+                    {item.content}
+                  </p>
+                  {item.tags && item.tags.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {item.tags.map((t) => (
+                        <span key={t} className="text-[11px] bg-violet-100/60 text-violet-700 px-2 py-0.5 rounded-md">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -761,4 +875,5 @@ export default function LifeLedgerPage() {
     </div>
   );
 }
+
 

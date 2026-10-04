@@ -13,7 +13,8 @@ import {
   Quote,
   Sparkle,
   Compass,
-  RefreshCw
+  RefreshCw,
+  Headphones
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { resolveLifeTexture } from "@/app/page";
@@ -124,6 +125,7 @@ export default function SundayDigestPage() {
   const hardTruthItems = items.filter((i) => resolveLifeTexture(i as any).key === "hard_truth");
   const perspectiveItems = items.filter((i) => resolveLifeTexture(i as any).key === "perspective");
   const ideaSparkItems = items.filter((i) => resolveLifeTexture(i as any).key === "idea_spark");
+  const mediaLogItems = items.filter((i) => resolveLifeTexture(i as any).key === "media_log");
 
   const today = new Date();
   const startDate = period === "7" ? subDays(today, 7) : period === "30" ? subDays(today, 30) : null;
@@ -524,6 +526,53 @@ export default function SundayDigestPage() {
                         </p>
                         <div className="flex items-center justify-between pt-3 border-t border-blue-500/10 text-xs text-blue-300/70">
                           <span>Spark</span>
+                          <span>{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.section>
+              )}
+
+              {/* SECTION: Media & Cultural Intake */}
+              {mediaLogItems.length > 0 && (
+                <motion.section
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-3xl bg-gradient-to-b from-indigo-950/20 via-slate-900/20 to-transparent border border-indigo-500/20 p-8 md:p-10 shadow-xl"
+                >
+                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-indigo-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                        <Headphones size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-xl md:text-2xl font-serif font-bold text-indigo-100">
+                          Media & Cultural Intake
+                        </h3>
+                        <p className="text-xs text-indigo-300/70">
+                          Music, cinema, anime, gaming & cultural resonance
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-indigo-200 bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-400/30">
+                      {mediaLogItems.length} {mediaLogItems.length === 1 ? "piece" : "pieces"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {mediaLogItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-5 rounded-2xl bg-indigo-950/30 border border-indigo-500/20 hover:border-indigo-500/40 transition-all flex flex-col justify-between"
+                      >
+                        <p className="text-indigo-100 font-medium text-sm md:text-base leading-relaxed mb-3">
+                          {item.content}
+                        </p>
+                        <div className="flex items-center justify-between pt-3 border-t border-indigo-500/10 text-xs text-indigo-300/70">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Headphones size={12} /> Intake
+                          </span>
                           <span>{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
                         </div>
                       </div>

@@ -10,15 +10,15 @@ const itemSchema: Schema = {
   properties: {
     is_future_actionable: {
       type: Type.BOOLEAN,
-      description: "TIME-FIRST EVALUATION: Set to true if the item is an upcoming event, meeting, call, deadline, errand, appointment, or future task with a scheduled or implied future time (e.g. 'call Rohit at 4 PM', 'MBA event on Oct 13', 'dentist tomorrow'). Set to false if it already occurred or is a subjective reflection/quote/idea.",
+      description: "TIME-FIRST EVALUATION: Set to true ONLY if the item has an explicit future scheduled date, time, call, appointment, or deadline (e.g. 'call Rohit at 4 PM', 'MBA event on Oct 13', 'dentist tomorrow at 10am'). Set to false for all past events, timeless intentions/wishlists, thoughts, setbacks, reflections, and media consumption.",
     },
     category: {
       type: Type.STRING,
-      description: "STRICT RULE: If is_future_actionable is true, category MUST be exactly one of: 'Task', 'Reminder', 'Event'. If is_future_actionable is false, category MUST be exactly one of: 'Milestone_HardWork', 'Quiet_Moment', 'Hard_Truth', 'Perspective_Lesson', 'Idea_Desire', 'Shaairi_Quote'.",
+      description: "Must be exactly one of: 'Task', 'Reminder', 'Event', 'Milestone_HardWork', 'Idea_Desire', 'Hard_Truth', 'Perspective_Lesson', 'Quiet_Moment', 'Media_Log', 'Shaairi_Quote'.",
     },
     life_texture: {
       type: Type.STRING,
-      description: "If is_future_actionable is true, life_texture MUST be 'actionable_obligation'. If is_future_actionable is false, life_texture MUST be one of: 'hard_work', 'quiet_moment', 'hard_truth', 'perspective', 'idea_spark', 'shaairi_quote'.",
+      description: "One of: 'actionable_obligation' (for future scheduled tasks/events), 'hard_work' (completed past hard work/milestones), 'idea_spark' (wishlists, intentions, uncompleted goals, concepts), 'hard_truth' (losses, bills, expenses, setbacks), 'perspective' (book lessons, wisdom), 'quiet_moment' (past micro-moments, tranquil walks, deep conversations), 'media_log' (songs, music, movies, trailers, games, anime, entertainment consumption), 'shaairi_quote' (poetry, lyrics).",
     },
     content: {
       type: Type.STRING,
@@ -27,22 +27,22 @@ const itemSchema: Schema = {
     tags: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Tags for the graph (e.g. ['call', 'rohit'] or ['trading', 'loss'] or ['reading', 'books'])",
+      description: "Tags for the graph (e.g. ['shoes', 'wishlist'] or ['music', 'pop'] or ['trading', 'loss'])",
     },
     sentiment_or_mood: {
       type: Type.STRING,
-      description: "e.g. focused, urgent, reflective, heavy, calm, excited, neutral",
+      description: "e.g. focused, aspiring, entertained, heavy, calm, reflective, neutral",
     },
     event_timestamp: {
       type: Type.STRING,
-      description: "Strict ISO 8601 string (e.g. '2026-10-04T16:00:00Z'). For future items, calculate the target event/call/deadline time relative to Current Absolute Time. For past items, calculate the past occurrence time if relative time is used; otherwise default to Current Absolute Time.",
+      description: "Strict ISO 8601 string (e.g. '2026-10-04T16:00:00Z'). For future items, calculate the target event/call/deadline time. For past items, calculate the past occurrence time if relative time is used; otherwise default to Current Absolute Time.",
     },
     calendar_action: {
       type: Type.OBJECT,
       properties: {
         is_actionable: {
           type: Type.BOOLEAN,
-          description: "MUST MATCH is_future_actionable. Set to true ONLY if the item describes a future action, call, appointment, deadline, or scheduled event.",
+          description: "MUST MATCH is_future_actionable. Set to true ONLY if the item describes a future action, call, appointment, deadline, or scheduled event with a temporal trigger.",
         },
         title: {
           type: Type.STRING,
@@ -93,44 +93,42 @@ TEMPORAL CONTEXT:
 - Current Absolute Time: ${nowIso}
 - User Timezone: ${tz}
 
-CRITICAL "TIME-FIRST" EVALUATION PROTOCOL (STRICT TWO-PHASE LOGIC):
+CRITICAL CATEGORIZATION RULES & STRICT DELINEATIONS (AVOID THE MILESTONE LEAK):
 
-Before assigning any category or subjective life texture, you MUST evaluate temporal intent by answering:
--> Is this item a future actionable obligation, upcoming call, appointment, or scheduled event? (is_future_actionable: boolean)
+1. 'Media_Log' (life_texture: 'media_log'):
+   - If the text describes listening to a song/album/podcast, watching a movie/trailer/anime/show, or playing a video game (e.g. "Heard Starboy", "watched the new Batman trailer", "listening to AP Dhillon", "played FIFA with friends"), you MUST classify it as 'Media_Log'.
+   - Media consumption is strictly CONSUMPTION, NOT a 'Quiet_Moment' and NEVER a 'Milestone'!
 
-============================================================
-PHASE 1: IF is_future_actionable IS TRUE
-============================================================
-- The item describes something in the future that needs to be done, called, or attended (e.g., "call today Rohit at 4 PM", "upcoming MBA event on Oct 13", "dentist appointment on Monday", "buy milk tomorrow", "finish assignment by 8 PM").
-- STRICT PROHIBITION: You are STRICTLY FORBIDDEN from categorizing future items as subjective reflections (such as Milestone, Quiet Moment, Hard Truth, or Perspective). A phone call at 4 PM is NOT a Milestone! An upcoming MBA event is NOT a Quiet Moment!
-- You MUST assign category as one of:
-  * 'Task' (errands, to-dos, tasks to complete)
-  * 'Reminder' (calls to make, bills to pay, check-ins)
-  * 'Event' (scheduled meetings, orientations, calendar dates, flights)
-- You MUST assign life_texture as: 'actionable_obligation'
-- You MUST set calendar_action:
-  * is_actionable: true
-  * title: clean event title (e.g. "Call Rohit", "MBA Event")
-  * start_time: mathematically calculated ISO 8601 timestamp based on Current Absolute Time (${nowIso})
-  * end_time: ISO 8601 timestamp (start_time + 30 mins if unspecified)
+2. 'Idea_Desire' (life_texture: 'idea_spark'):
+   - For timeless intentions, wishlist items, things to buy, books to read, uncompleted aspirations, and creative concepts (e.g., "want to get a pair of running shoes", "want to start 'Ikigai'", "idea for a study planner app", "thinking of learning Spanish", "wishlist: mechanical keyboard").
+   - NEVER categorize uncompleted desires or wishlists as 'Milestone_HardWork'!
 
-============================================================
-PHASE 2: IF is_future_actionable IS FALSE
-============================================================
-- The item already happened in the past, is an emotional state, a financial setback, a completed achievement, or a timeless quote/idea.
-- ONLY in this phase are you permitted to route into Life Ledger reflection textures:
-  * 'Milestone_HardWork' (life_texture: 'hard_work'): Major completed achievements, submitted PRs/applications, finished exams, shipped milestones. (NEVER future calls or errands!).
-  * 'Quiet_Moment' (life_texture: 'quiet_moment'): Past micro-moments, quiet walks, meaningful conversations that happened, listening to music, small joys. (NEVER upcoming scheduled events or obligations!).
-  * 'Hard_Truth' (life_texture: 'hard_truth'): Financial losses, trading setbacks, big expenses, emotional difficulties, or mistakes that occurred.
-  * 'Perspective_Lesson' (life_texture: 'perspective'): Reflections from books, wisdom, philosophical shifts, lessons learned.
-  * 'Idea_Desire' (life_texture: 'idea_spark'): Creative ideas, product concepts, future wishlist desires (non-time-bound).
-  * 'Shaairi_Quote' (life_texture: 'shaairi_quote'): Poetry, lyrics, or quotes.
-- You MUST set calendar_action.is_actionable: false.
+3. 'Hard_Truth' (life_texture: 'hard_truth'):
+   - For setbacks, financial losses, trading losses, paid bills, big expenses, failures, and emotionally difficult days (e.g., "yesterday was worst day I lost massively in options", "lost 15k trading", "paid wifi bill 800", "bought groceries for 1200", "failed the mock test").
+   - Financial losses, bills, and expenses are NEVER 'Milestone_HardWork'!
+
+4. 'Milestone_HardWork' (life_texture: 'hard_work'):
+   - STRICT RULE: ONLY for difficult, fully COMPLETED past actions and real achievements (e.g., "finished my resume update", "submitted the final thesis", "shipped auth module v2", "hit 100 pull-ups target").
+   - NEVER use this for future intentions, wishlists, chores, bills, or media!
+
+5. 'Quiet_Moment' (life_texture: 'quiet_moment'):
+   - For genuine past micro-moments of peace, quiet evening walks, heartfelt conversations with loved ones, small tranquil joys, and serendipities. (NOT pop songs or movie trailers—those are Media_Log!).
+
+6. 'Perspective_Lesson' (life_texture: 'perspective'):
+   - For wisdom gained from books, philosophical thoughts, mindset realizations, and personal lessons.
+
+7. 'Task' / 'Reminder' / 'Event' (life_texture: 'actionable_obligation'):
+   - If the text describes an upcoming task, call, meeting, appointment, deadline, or scheduled event (e.g., "call today Rohit at 4 PM", "upcoming MBA event on Oct 13", "dentist appointment tomorrow at 10am"):
+     * Set 'is_future_actionable: true'
+     * Set 'category' as 'Task', 'Reminder', or 'Event'
+     * Set 'life_texture' as 'actionable_obligation'
+     * Set 'calendar_action.is_actionable: true' with computed start_time and end_time.
+   - If it is not a scheduled time-bound obligation, set 'is_future_actionable: false' and 'calendar_action.is_actionable: false'.
 
 CRITICAL "PASTE AND SPLIT" PROTOCOL:
 - When a user inputs a wall of text, multiple sentences, bullet points, numbered lines, or disjointed thoughts, you MUST NEVER treat it as one single lump thought.
 - You MUST slice and split the input into separate, individual atomic items in the output array.
-- For EACH item sliced, execute Phase 1 (Time Evaluation) then Phase 2 (Categorization).
+- For EACH item sliced, execute strict categorization.
 
 Text to slice and extract:
 """${text}"""`;
