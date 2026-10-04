@@ -47,11 +47,16 @@ export function Sidebar() {
   }, [pathname]);
 
   return (
-    <aside className="w-64 bg-white/70 backdrop-blur-xl border-r border-pink-100/80 h-screen sticky top-0 flex flex-col p-4 shadow-[4px_0_24px_rgba(244,114,182,0.05)]">
-      <div className="mb-8 px-4 mt-4">
-        <h1 className="text-2xl font-extrabold bg-gradient-to-r from-pink-600 via-rose-500 to-pink-400 bg-clip-text text-transparent tracking-tight">
-          Write
-        </h1>
+    <aside className="w-64 bg-[#0d0e15] border-r border-white/10 h-screen sticky top-0 flex flex-col p-4 shadow-2xl text-zinc-300">
+      <div className="mb-8 px-4 mt-3">
+        <Link href="/" className="inline-block group">
+          <h1 className="text-2xl font-serif font-bold text-white tracking-tight flex items-center gap-2 group-hover:text-rose-400 transition-colors">
+            August
+          </h1>
+          <p className="text-[11px] font-sans text-zinc-500 uppercase tracking-widest mt-0.5">
+            Life Ledger & Mirror
+          </p>
+        </Link>
       </div>
       
       <nav className="flex-1 space-y-1.5">
@@ -64,13 +69,13 @@ export function Sidebar() {
               key={item.name}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium",
+                "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 text-sm font-medium",
                 isActive 
-                  ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-[0_4px_14px_rgba(244,63,94,0.3)] font-semibold" 
-                  : "text-zinc-600 hover:text-zinc-900 hover:bg-pink-50/80"
+                  ? "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-950/50 font-semibold" 
+                  : "text-zinc-400 hover:text-white hover:bg-white/5"
               )}
             >
-              <Icon size={18} className={cn("transition-colors", isActive ? "text-white" : "text-pink-400")} />
+              <Icon size={18} className={cn("transition-colors", isActive ? "text-white" : "text-rose-400/80")} />
               {item.name}
             </Link>
           );
@@ -79,11 +84,11 @@ export function Sidebar() {
 
       {/* Google Calendar Integration Card */}
       <div className="mt-auto px-2 py-3">
-        <div className="bg-pink-50/60 border border-pink-100 rounded-2xl p-3.5 mb-3">
+        <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 mb-3">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-2">
-              <Calendar size={15} className="text-pink-600" />
-              <span className="text-xs font-bold text-zinc-800">Google Calendar</span>
+              <Calendar size={15} className="text-rose-400" />
+              <span className="text-xs font-bold text-zinc-200">Google Calendar</span>
             </div>
             {calendarConnected ? (
               <span className="flex h-2 w-2 relative">
@@ -92,21 +97,21 @@ export function Sidebar() {
               </span>
             ) : null}
           </div>
-          <p className="text-[11px] text-zinc-500 leading-snug mb-2.5">
+          <p className="text-[11px] text-zinc-400 leading-snug mb-2.5">
             {calendarConnected
               ? "Auto-syncing reminders directly to your calendar."
-              : "Connect once to auto-add date reminders in the background."}
+              : "Connect to auto-sync reminders in background."}
           </p>
 
           {calendarConnected ? (
-            <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg">
+            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl">
               <CheckCircle2 size={12} />
               <span>Auto-Sync Active</span>
             </div>
           ) : (
             <a
               href="/api/auth/google"
-              className="inline-flex items-center justify-center gap-1.5 w-full bg-white hover:bg-pink-100/60 text-pink-700 border border-pink-200 text-xs font-semibold py-1.5 px-2.5 rounded-xl transition-all shadow-xs active:scale-[0.98]"
+              className="inline-flex items-center justify-center gap-1.5 w-full bg-white/10 hover:bg-white/15 text-zinc-200 border border-white/15 text-xs font-semibold py-1.5 px-2.5 rounded-xl transition-all shadow-xs active:scale-[0.98]"
             >
               <span>Connect Google</span>
               <ExternalLink size={11} />
@@ -114,9 +119,10 @@ export function Sidebar() {
           )}
         </div>
 
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-pink-200 to-transparent mb-3" />
-        <p className="text-[11px] text-zinc-400 text-center font-medium">v1.0 • NLP & Temporal Engine Active</p>
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mb-3" />
+        <p className="text-[10px] font-mono text-zinc-500 text-center">August • Private Life Ledger</p>
       </div>
     </aside>
   );
 }
+

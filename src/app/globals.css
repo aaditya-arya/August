@@ -3,6 +3,8 @@
 @theme {
   --color-background: #faf7f8;
   --color-foreground: #1c1917;
+  --font-serif: var(--font-serif), Newsreader, Georgia, Cambria, "Times New Roman", serif;
+  --font-sans: var(--font-sans), Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 :root {
@@ -18,19 +20,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Scrollbar for light pinkish theme */
+.font-serif {
+  font-family: var(--font-serif), Georgia, serif;
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(244, 114, 182, 0.2);
+  background: rgba(244, 114, 182, 0.25);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(244, 114, 182, 0.35);
+  background: rgba(244, 114, 182, 0.45);
 }
+
 
