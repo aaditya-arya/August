@@ -8,13 +8,17 @@ function getClient() {
 const itemSchema: Schema = {
   type: Type.OBJECT,
   properties: {
+    is_future_actionable: {
+      type: Type.BOOLEAN,
+      description: "TIME-FIRST EVALUATION: Set to true if the item is an upcoming event, meeting, call, deadline, errand, appointment, or future task with a scheduled or implied future time (e.g. 'call Rohit at 4 PM', 'MBA event on Oct 13', 'dentist tomorrow'). Set to false if it already occurred or is a subjective reflection/quote/idea.",
+    },
     category: {
       type: Type.STRING,
-      description: "Must be exactly one of: Hard_Work, Quiet_Moment, Hard_Truth, Perspective, Idea_Desire, Shaairi_Quote, Done, Learning",
+      description: "STRICT RULE: If is_future_actionable is true, category MUST be exactly one of: 'Task', 'Reminder', 'Event'. If is_future_actionable is false, category MUST be exactly one of: 'Milestone_HardWork', 'Quiet_Moment', 'Hard_Truth', 'Perspective_Lesson', 'Idea_Desire', 'Shaairi_Quote'.",
     },
     life_texture: {
       type: Type.STRING,
-      description: "One of: 'hard_work' (cleared tasks, applications, career milestones), 'quiet_moment' (conversations, walks, small joys, music), 'hard_truth' (financial losses, expenses, emotional setbacks, tough days), 'perspective' (reflections, book lessons, mindset shifts), 'idea_spark' (concepts, wishes), 'shaairi_quote' (poetry, quotes)",
+      description: "If is_future_actionable is true, life_texture MUST be 'actionable_obligation'. If is_future_actionable is false, life_texture MUST be one of: 'hard_work', 'quiet_moment', 'hard_truth', 'perspective', 'idea_spark', 'shaairi_quote'.",
     },
     content: {
       type: Type.STRING,
@@ -23,26 +27,26 @@ const itemSchema: Schema = {
     tags: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Tags for the graph (e.g. ['trading', 'loss'] or ['reading', 'books'] or ['walk', 'evening'])",
+      description: "Tags for the graph (e.g. ['call', 'rohit'] or ['trading', 'loss'] or ['reading', 'books'])",
     },
     sentiment_or_mood: {
       type: Type.STRING,
-      description: "e.g. heavy, reflective, accomplished, calm, focused, grateful, urgent",
+      description: "e.g. focused, urgent, reflective, heavy, calm, excited, neutral",
     },
     event_timestamp: {
       type: Type.STRING,
-      description: "Strict ISO 8601 string (e.g. '2026-09-27T16:00:00Z'). Mathematically calculate the real-world occurrence time if relative time (e.g. '4 days ago', 'last night', 'yesterday', '2 weeks back') is used, based on Current Absolute Time. If no time is specified in the text, default to the Current Absolute Time.",
+      description: "Strict ISO 8601 string (e.g. '2026-10-04T16:00:00Z'). For future items, calculate the target event/call/deadline time relative to Current Absolute Time. For past items, calculate the past occurrence time if relative time is used; otherwise default to Current Absolute Time.",
     },
     calendar_action: {
       type: Type.OBJECT,
       properties: {
         is_actionable: {
           type: Type.BOOLEAN,
-          description: "Set to true ONLY if the text explicitly describes a future task, call, meeting, deadline, appointment, or errand with a temporal trigger (e.g., 'tomorrow', 'before Friday', 'at 5 PM', 'next Monday'). Otherwise false.",
+          description: "MUST MATCH is_future_actionable. Set to true ONLY if the item describes a future action, call, appointment, deadline, or scheduled event.",
         },
         title: {
           type: Type.STRING,
-          description: "A concise, clean calendar event title (e.g. 'Call Rohan - Project Deadline', 'Renew Gym Membership').",
+          description: "A clean, concise title for Google Calendar (e.g. 'Call Rohit', 'MBA Orientation Event', 'Renew Gym Membership').",
         },
         start_time: {
           type: Type.STRING,
@@ -56,7 +60,7 @@ const itemSchema: Schema = {
       required: ["is_actionable"],
     },
   },
-  required: ["category", "content", "tags", "event_timestamp", "calendar_action"],
+  required: ["is_future_actionable", "category", "life_texture", "content", "tags", "event_timestamp", "calendar_action"],
 };
 
 const extractionSchema: Schema = {
@@ -77,44 +81,56 @@ export async function extractItems(
 ) {
   const candidateModels = [
     "gemini-3-flash-preview",
-    "gemini-2.5-flash",
+    "gemini-2.0-flash",
   ];
 
   const nowIso = context?.currentTime || new Date().toISOString();
   const tz = context?.timezone || "UTC";
 
-  const prompt = `You are an advanced temporal, conceptual, and action-oriented NLP engine for a note-taking app.
+  const prompt = `You are an advanced temporal, conceptual, and action-oriented NLP engine for August (Life Ledger & Knowledge Mirror).
 
 TEMPORAL CONTEXT:
 - Current Absolute Time: ${nowIso}
 - User Timezone: ${tz}
 
+CRITICAL "TIME-FIRST" EVALUATION PROTOCOL (STRICT TWO-PHASE LOGIC):
+
+Before assigning any category or subjective life texture, you MUST evaluate temporal intent by answering:
+-> Is this item a future actionable obligation, upcoming call, appointment, or scheduled event? (is_future_actionable: boolean)
+
+============================================================
+PHASE 1: IF is_future_actionable IS TRUE
+============================================================
+- The item describes something in the future that needs to be done, called, or attended (e.g., "call today Rohit at 4 PM", "upcoming MBA event on Oct 13", "dentist appointment on Monday", "buy milk tomorrow", "finish assignment by 8 PM").
+- STRICT PROHIBITION: You are STRICTLY FORBIDDEN from categorizing future items as subjective reflections (such as Milestone, Quiet Moment, Hard Truth, or Perspective). A phone call at 4 PM is NOT a Milestone! An upcoming MBA event is NOT a Quiet Moment!
+- You MUST assign category as one of:
+  * 'Task' (errands, to-dos, tasks to complete)
+  * 'Reminder' (calls to make, bills to pay, check-ins)
+  * 'Event' (scheduled meetings, orientations, calendar dates, flights)
+- You MUST assign life_texture as: 'actionable_obligation'
+- You MUST set calendar_action:
+  * is_actionable: true
+  * title: clean event title (e.g. "Call Rohit", "MBA Event")
+  * start_time: mathematically calculated ISO 8601 timestamp based on Current Absolute Time (${nowIso})
+  * end_time: ISO 8601 timestamp (start_time + 30 mins if unspecified)
+
+============================================================
+PHASE 2: IF is_future_actionable IS FALSE
+============================================================
+- The item already happened in the past, is an emotional state, a financial setback, a completed achievement, or a timeless quote/idea.
+- ONLY in this phase are you permitted to route into Life Ledger reflection textures:
+  * 'Milestone_HardWork' (life_texture: 'hard_work'): Major completed achievements, submitted PRs/applications, finished exams, shipped milestones. (NEVER future calls or errands!).
+  * 'Quiet_Moment' (life_texture: 'quiet_moment'): Past micro-moments, quiet walks, meaningful conversations that happened, listening to music, small joys. (NEVER upcoming scheduled events or obligations!).
+  * 'Hard_Truth' (life_texture: 'hard_truth'): Financial losses, trading setbacks, big expenses, emotional difficulties, or mistakes that occurred.
+  * 'Perspective_Lesson' (life_texture: 'perspective'): Reflections from books, wisdom, philosophical shifts, lessons learned.
+  * 'Idea_Desire' (life_texture: 'idea_spark'): Creative ideas, product concepts, future wishlist desires (non-time-bound).
+  * 'Shaairi_Quote' (life_texture: 'shaairi_quote'): Poetry, lyrics, or quotes.
+- You MUST set calendar_action.is_actionable: false.
+
 CRITICAL "PASTE AND SPLIT" PROTOCOL:
 - When a user inputs a wall of text, multiple sentences, bullet points, numbered lines, or disjointed thoughts, you MUST NEVER treat it as one single lump thought.
 - You MUST slice and split the input into separate, individual atomic items in the output array.
-- For example:
-  * "Heard Starboy, buy groceries, finished the report" -> MUST be split into 3 distinct items (Media, Wishlist/Idea, Done).
-  * A 5-bullet grocery or task list -> MUST be split into 5 individual items so each becomes its own searchable node on the user's graph.
-  * Never summarize or collapse distinct ideas together.
-
-TASK:
-1. Analyze the following raw thought dump and slice it into all its distinct individual items.
-2. Categorize each item into EXACTLY ONE life category:
-   - 'Hard_Work': Cleared PRs, submitted applications, assignments, exams, career achievements.
-   - 'Quiet_Moment': Micro-moments, quiet walks, conversations, music, feelings, unquantifiable life moments.
-   - 'Hard_Truth': Financial losses, trading setbacks, big expenses (e.g. bought groceries for 620), tough emotional days, mistakes. NEVER label losses/setbacks as 'Done' or accomplishments!
-   - 'Perspective': Books read, reflections, philosophical thoughts, personal insights, lessons learned.
-   - 'Idea_Desire': Brainstorming, wishlist, product concepts, future wishes.
-   - 'Shaairi_Quote': Poetry, lyrics, shaairi, quotes.
-3. Assign 'life_texture': 'hard_work', 'quiet_moment', 'hard_truth', 'perspective', 'idea_spark', or 'shaairi_quote'.
-4. Generate 1 to 3 relevant tags and a sentiment/mood for each item.
-5. Calculate 'event_timestamp' (ISO 8601 format):
-   - If the item mentions relative time (e.g., "4 days ago", "last night", "on Tuesday", "yesterday morning"), mathematically calculate the exact past or future timestamp relative to the Current Absolute Time (${nowIso}).
-   - If no specific time or relative date is mentioned, use Current Absolute Time (${nowIso}).
-6. Detect Calendar Actionability ('calendar_action'):
-   - Set 'is_actionable: true' ONLY if the item describes a future action, call, appointment, deadline, or scheduled task (e.g. "call Rohan about project tomorrow", "renew gym membership before Friday", "pay wifi bill by the 5th", "dentist appointment on Monday").
-   - For actionable items, provide a clean 'title', 'start_time' (ISO 8601), and 'end_time' (ISO 8601).
-   - If the item is general thought, past accomplishment, or non-time-bound desire/quote, set 'is_actionable: false'.
+- For EACH item sliced, execute Phase 1 (Time Evaluation) then Phase 2 (Categorization).
 
 Text to slice and extract:
 """${text}"""`;
@@ -211,8 +227,8 @@ export async function generateWeeklySynthesis(
   }
 
   const candidateModels = [
-    "gemini-2.5-flash",
     "gemini-3-flash-preview",
+    "gemini-2.0-flash",
   ];
 
   const formattedItems = items

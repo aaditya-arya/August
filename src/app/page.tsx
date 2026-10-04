@@ -46,7 +46,7 @@ export type LedgerItem = {
  * Maps raw category or content into an authentic Life Texture
  */
 export function resolveLifeTexture(item: LedgerItem): {
-  key: "hard_work" | "quiet_moment" | "hard_truth" | "perspective" | "idea_spark";
+  key: "actionable_obligation" | "hard_work" | "quiet_moment" | "hard_truth" | "perspective" | "idea_spark";
   label: string;
   borderClass: string;
   bgAccent: string;
@@ -54,21 +54,34 @@ export function resolveLifeTexture(item: LedgerItem): {
   icon: any;
 } {
   const c = (item.category || "").toLowerCase();
-  const text = (item.content || "").toLowerCase();
   const texture = (item.life_texture || "").toLowerCase();
+  const isActionable = Boolean(item.calendar_action?.is_actionable);
 
-  // 1. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
+  // 1. TIME-FIRST EVALUATION: Actionable Obligations, Tasks, Reminders, and Events
+  if (
+    isActionable ||
+    texture === "actionable_obligation" ||
+    c === "task" ||
+    c === "reminder" ||
+    c === "event"
+  ) {
+    const isEvent = c === "event" || (item.content || "").toLowerCase().includes("event") || (item.content || "").toLowerCase().includes("orientation");
+    const isReminder = c === "reminder" || (item.content || "").toLowerCase().includes("call") || (item.content || "").toLowerCase().includes("remind");
+    return {
+      key: "actionable_obligation",
+      label: isEvent ? "Scheduled Event" : isReminder ? "Call & Reminder" : "Actionable Task",
+      borderClass: "border-sky-300/80 hover:border-sky-400",
+      bgAccent: "bg-sky-500",
+      textAccent: "text-sky-900 bg-sky-100/90 border-sky-300/60",
+      icon: Calendar,
+    };
+  }
+
+  // 2. Cost & Hard Truths (Financial hits, losses, grocery expenses, tough emotional days)
   if (
     texture === "hard_truth" ||
     c === "hard_truth" ||
-    text.includes("loss") ||
-    text.includes("lost") ||
-    text.includes("worst day") ||
-    text.includes("spent") ||
-    text.includes("expense") ||
-    text.includes("bought groceries") ||
-    text.includes("rupees") ||
-    text.includes("bill")
+    c.includes("truth")
   ) {
     return {
       key: "hard_truth",
@@ -80,16 +93,12 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 2. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
+  // 3. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
   if (
     texture === "perspective" ||
     c === "perspective" ||
-    c === "learning" ||
-    text.includes("reading") ||
-    text.includes("book") ||
-    text.includes("realized") ||
-    text.includes("learned") ||
-    text.includes("lesson")
+    c === "perspective_lesson" ||
+    c === "learning"
   ) {
     return {
       key: "perspective",
@@ -101,18 +110,12 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 3. Quiet Moments (Conversations, walks, small joys, music, poetry, serendipity)
+  // 4. Quiet Moments (Past micro-moments, quiet walks, small joys, music, conversations)
   if (
     texture === "quiet_moment" ||
     c === "quiet_moment" ||
     c === "media" ||
-    c === "shaairi_quote" ||
-    text.includes("walk") ||
-    text.includes("song") ||
-    text.includes("met") ||
-    text.includes("conversation") ||
-    text.includes("quiet") ||
-    text.includes("coffee")
+    c === "shaairi_quote"
   ) {
     return {
       key: "quiet_moment",
@@ -124,8 +127,8 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 4. Ideas & Sparks
-  if (texture === "idea_spark" || c === "idea" || c === "wishlist" || c === "idea_desire") {
+  // 5. Ideas & Sparks
+  if (texture === "idea_spark" || c === "idea_desire" || c === "idea" || c === "wishlist") {
     return {
       key: "idea_spark",
       label: "Idea & Desire",
@@ -136,14 +139,26 @@ export function resolveLifeTexture(item: LedgerItem): {
     };
   }
 
-  // 5. Default: Hard Work & Milestones
+  // 6. Hard Work & Real Milestones
+  if (texture === "hard_work" || c === "milestone_hardwork" || c === "hard_work" || c === "done") {
+    return {
+      key: "hard_work",
+      label: "Milestone & Achievement",
+      borderClass: "border-emerald-300/80 hover:border-emerald-400",
+      bgAccent: "bg-emerald-500",
+      textAccent: "text-emerald-900 bg-emerald-100/90 border-emerald-300/60",
+      icon: CheckCircle2,
+    };
+  }
+
+  // Default fallback for general thoughts
   return {
-    key: "hard_work",
-    label: "Milestone & Hard Work",
-    borderClass: "border-emerald-300/80 hover:border-emerald-400",
-    bgAccent: "bg-emerald-500",
-    textAccent: "text-emerald-900 bg-emerald-100/90 border-emerald-300/60",
-    icon: CheckCircle2,
+    key: "quiet_moment",
+    label: "Life Note",
+    borderClass: "border-purple-300/80 hover:border-purple-400",
+    bgAccent: "bg-purple-500",
+    textAccent: "text-purple-900 bg-purple-100/90 border-purple-300/60",
+    icon: Coffee,
   };
 }
 
@@ -280,6 +295,7 @@ export default function LifeLedgerPage() {
 
   const countByTexture = useMemo(() => {
     const counts: Record<string, number> = {
+      actionable_obligation: 0,
       hard_work: 0,
       quiet_moment: 0,
       hard_truth: 0,
@@ -408,7 +424,7 @@ export default function LifeLedgerPage() {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Log a win, a hard day, an expense, a quiet conversation, or a lesson (e.g. 'Met a new friend for coffee', 'Lost 1.5k trading today', 'Shipped the auth refactor')..."
+            placeholder="Log an upcoming task, a past memory, a quiet walk, an expense, or a lesson (e.g. 'Call Rohit at 4 PM', 'MBA event on Oct 13', 'Met a new friend for coffee', 'Lost 1.5k trading')..."
             className="w-full bg-rose-50/20 text-zinc-900 border border-rose-100 rounded-2xl p-4 text-sm md:text-base font-normal focus:outline-none focus:bg-white transition-all resize-none min-h-[95px] placeholder:text-zinc-400"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -472,6 +488,18 @@ export default function LifeLedgerPage() {
         >
           All ({items.length})
         </button>
+        {countByTexture.actionable_obligation > 0 && (
+          <button
+            onClick={() => setActiveTextureFilter(activeTextureFilter === "actionable_obligation" ? null : "actionable_obligation")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeTextureFilter === "actionable_obligation"
+                ? "bg-sky-600 text-white"
+                : "bg-white text-sky-800 hover:bg-sky-50 border border-sky-200"
+            }`}
+          >
+            📅 Tasks & Events ({countByTexture.actionable_obligation})
+          </button>
+        )}
         <button
           onClick={() => setActiveTextureFilter(activeTextureFilter === "quiet_moment" ? null : "quiet_moment")}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -500,7 +528,7 @@ export default function LifeLedgerPage() {
               : "bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200"
           }`}
         >
-          🔨 Hard Work ({countByTexture.hard_work})
+          🔨 Milestones ({countByTexture.hard_work})
         </button>
         <button
           onClick={() => setActiveTextureFilter(activeTextureFilter === "perspective" ? null : "perspective")}
@@ -532,7 +560,7 @@ export default function LifeLedgerPage() {
           <Flame className="mx-auto text-rose-400 mb-2" size={32} />
           <h3 className="text-base font-bold text-zinc-800">Your ledger is ready</h3>
           <p className="text-zinc-500 text-xs mt-1">
-            Log your daily micro-moments, wins, expenses, or lessons in the box above.
+            Log your daily micro-moments, tasks, expenses, or lessons in the box above.
           </p>
         </div>
       ) : (
@@ -540,6 +568,53 @@ export default function LifeLedgerPage() {
           {filteredItems.map((item) => {
             const texture = resolveLifeTexture(item);
             const Icon = texture.icon;
+
+            // TREATMENT 0: ACTIONABLE OBLIGATIONS (Tasks, Calls, Reminders, Calendar Events)
+            if (texture.key === "actionable_obligation") {
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white border-l-4 border-l-sky-500 border border-sky-100 p-5 md:p-6 rounded-2xl flex flex-col gap-2 shadow-[0_2px_12px_rgba(14,165,233,0.05)] hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 flex items-center gap-1.5">
+                      <Calendar size={12} className="text-sky-600" /> {texture.label}
+                    </span>
+                    <span className="text-xs font-mono font-medium text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-md border border-sky-100">
+                      {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-zinc-900 font-semibold text-base leading-relaxed">
+                    {item.content}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-1 pt-2 border-t border-zinc-100">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {item.tags?.map((t) => (
+                        <span
+                          key={t}
+                          className="text-[11px] bg-sky-50 text-sky-700 font-medium px-2 py-0.5 rounded-md border border-sky-200/50"
+                        >
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+
+                    {item.calendar_action && item.calendar_action.is_actionable && (
+                      <a
+                        href={generateGoogleCalendarUrl(item.calendar_action, item.content)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 px-3.5 py-1.5 rounded-xl shadow-xs transition-all"
+                      >
+                        <Calendar size={12} />
+                        Add to Google Calendar
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            }
 
             // TREATMENT 1: QUIET MOMENT (Spacious, isolated, elegant serif typography)
             if (texture.key === "quiet_moment") {
@@ -686,3 +761,4 @@ export default function LifeLedgerPage() {
     </div>
   );
 }
+
