@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("extracted_items")
-      .select("id, content, category, life_texture, tags, sentiment_or_mood, event_timestamp, created_at")
+      .select("id, content, category, tags, sentiment_or_mood, event_timestamp, created_at")
       .order("event_timestamp", { ascending: false });
 
     let periodLabel = "All Time";
