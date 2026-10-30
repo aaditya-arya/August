@@ -1,27 +1,207 @@
 @import "tailwindcss";
 
-@theme {
-  --color-background: #faf7f8;
-  --color-foreground: #1c1917;
-  --font-serif: var(--font-serif), Newsreader, Georgia, Cambria, "Times New Roman", serif;
-  --font-sans: var(--font-sans), Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --font-serif: var(--font-lora), Georgia, Cambria, "Times New Roman", serif;
+  --font-sans: var(--font-dm-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 :root {
-  --background: #faf7f8;
-  --foreground: #1c1917;
+  color-scheme: light;
+  --background: #faf8f5;
+  --foreground: #302c2a;
+  --surface: #fffefd;
+  --sidebar: #f3efeb;
+  --muted: #77716d;
+  --border: #e7dfd8;
+  --paper: #fffefd;
+  --accent: #aa4967;
+  --horizon-background: #f3eee8;
+  --media-background: #f2f1fa;
+  --cost-background: #f5f0e8;
+  --paper-shadow: 0 8px 40px rgb(74 47 29 / 4%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #121314;
+  --foreground: #eee8e0;
+  --surface: #1d1e20;
+  --sidebar: #171819;
+  --muted: #aaa39c;
+  --border: #343234;
+  --paper: #1d1e20;
+  --accent: #e5a0b5;
+  --horizon-background: #222022;
+  --media-background: #20202d;
+  --cost-background: #26221d;
+  --paper-shadow: 0 8px 40px rgb(0 0 0 / 12%);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.font-serif {
-  font-family: var(--font-serif), Georgia, serif;
+h1, h2, h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  text-wrap: balance;
+}
+
+button, a, input, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled), [role="button"] {
+  cursor: pointer;
+}
+
+:where(button, a, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.entry-copy {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 1.0625rem;
+  font-weight: 400;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.horizon-card {
+  background: var(--horizon-background);
+}
+
+.media-card {
+  background: var(--media-background);
+}
+
+.cost-card {
+  background: var(--cost-background);
+}
+
+.writing-paper {
+  background: var(--paper);
+  box-shadow: var(--paper-shadow);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  overflow: hidden;
+}
+
+.writing-paper:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.writing-editor {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  max-height: 720px;
+  resize: vertical;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  caret-color: var(--accent);
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: clamp(1.0625rem, 1rem + .2vw, 1.25rem);
+  font-weight: 400;
+  line-height: 1.95;
+  letter-spacing: .005em;
+  outline: none;
+  padding: 0;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+
+.writing-editor::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.writing-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+  padding: clamp(12px, 3vw, 40px);
+  background: var(--background);
+  overscroll-behavior: contain;
+}
+
+.writing-focus .writing-paper {
+  display: flex;
+  flex-direction: column;
+  max-width: 960px;
+  min-height: calc(100dvh - clamp(24px, 6vw, 80px));
+  margin: 0 auto;
+  overflow: clip;
+}
+
+.writing-focus .writing-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
+  border-radius: 1.5rem 1.5rem 0 0;
+}
+
+.writing-focus .writing-editor {
+  min-height: 45dvh;
+  max-height: none;
+}
+
+.writing-focus .writing-footer {
+  margin-top: auto;
+}
+
+@media (max-width: 639px) {
+  .writing-editor {
+    min-height: 300px;
+  }
+  .entry-copy {
+    font-size: 1rem;
+  }
+}
+
+.theme-icon-dark {
+  display: none;
+}
+
+[data-theme="dark"] .theme-icon-light {
+  display: none;
+}
+
+[data-theme="dark"] .theme-icon-dark {
+  display: inline;
+}
+
+.theme-toggle-thumb {
+  transition: transform 220ms ease, background-color 220ms ease;
+}
+
+[data-theme="dark"] .theme-toggle-thumb {
+  transform: translateX(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle,
+  .theme-toggle-thumb {
+    transition: none;
+  }
 }
 
 /* Custom Scrollbars */

@@ -1,17 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Newsreader } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
+import { themeInitScript } from "@/lib/theme";
 
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: "--font-sans",
+const dmSans = localFont({
+  src: "./fonts/dm-sans-latin-variable.woff2",
+  weight: "100 900",
+  display: "swap",
+  variable: "--font-dm-sans",
 });
 
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  variable: "--font-serif",
+const lora = localFont({
+  src: [
+    { path: "./fonts/lora-latin-variable.woff2", weight: "400 700", style: "normal" },
+    { path: "./fonts/lora-latin-variable-italic.woff2", weight: "400 700", style: "italic" },
+  ],
+  display: "swap",
+  variable: "--font-lora",
 });
 
 export const viewport: Viewport = {
@@ -41,10 +47,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable}`}>
-      <body className={`${inter.className} bg-[#0b0c10] text-zinc-100 min-h-screen flex selection:bg-rose-500/30 selection:text-rose-200 antialiased`}>
+    <html lang="en" data-theme="light" suppressHydrationWarning className={`${dmSans.variable} ${lora.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="bg-background text-foreground min-h-screen flex flex-col md:flex-row selection:bg-rose-500/30 selection:text-rose-900 dark:selection:text-rose-200 antialiased">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto relative min-h-screen bg-[#faf8f9]">
+        <main className="flex-1 min-w-0 overflow-y-auto relative min-h-screen bg-background">
           {children}
         </main>
       </body>
