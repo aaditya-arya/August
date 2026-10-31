@@ -4,7 +4,7 @@ const path = require('node:path');
 const { loadEnvConfig } = require('@next/env');
 const { createClient } = require('@supabase/supabase-js');
 const { classifyExistingItems } = require('../.test-build/gemini.js');
-const { CATEGORIES, isObligation } = require('../.test-build/ledger.js');
+const { validCategoryName, isObligation } = require('../.test-build/ledger.js');
 
 loadEnvConfig(process.cwd());
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/rest\/v1\/?$/, ''), process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -17,7 +17,7 @@ async function main() {
     const plan = JSON.parse(fs.readFileSync(filename, 'utf8'));
     if (!Array.isArray(plan.changes)) throw new Error('Invalid repair plan.');
     for (const change of plan.changes) {
-      if (!CATEGORIES.includes(change.to)) throw new Error('Unknown category in repair plan.');
+      if (!validCategoryName(change.to)) throw new Error('Unknown category in repair plan.');
       const update = { category: change.to };
       if (!isObligation(change.to)) {
         update.calendar_action = { is_actionable: false };
@@ -46,7 +46,7 @@ async function main() {
   fs.writeFileSync(backup, JSON.stringify(items, null, 2), { flag: 'wx' });
   const proposals = [];
   for (let i = 0; i < items.length; i += 40) {
-    proposals.push(...await classifyExistingItems(items.slice(i, i + 40).map(({ id, content, created_at }) => ({ id, content, created_at }))));
+    proposals.push(...await classifyExistingItems(items.slice(i, i + 40).map(({ id, content, created_at, category }) => ({ id, content, created_at, category }))));
   }
   const changes = proposals.flatMap((proposal) => {
     const item = items.find((entry) => entry.id === proposal.id);

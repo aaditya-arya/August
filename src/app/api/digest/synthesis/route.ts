@@ -1,63 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
-import { normalizeStoredItem } from "@/lib/ledger";
-import { generateWeeklySynthesis } from "@/lib/gemini";
+import { buildSundayReview } from "@/lib/review-service";
+import { errorMessage } from "@/lib/errors";
+import { validTimezone } from "@/lib/time";
 
+export const maxDuration = 300;
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const days = searchParams.get("days"); // "7", "30", or null for all
-
-    let query = supabase
-      .from("extracted_items")
-      .select("id, content, category, tags, sentiment_or_mood, event_timestamp, created_at, calendar_action")
-      .order("event_timestamp", { ascending: false });
-
-    let periodLabel = "All Time";
-    if (days && days !== "all") {
-      const daysNum = parseInt(days, 10);
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - daysNum);
-      query = query.gte("event_timestamp", cutoff.toISOString());
-      periodLabel = daysNum === 7 ? "This Past Week" : `The Past ${daysNum} Days`;
-    }
-
-    const { data: items, error } = await query;
-
-    if (error) {
-      console.error("Error fetching items for synthesis:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const synthesis = await generateWeeklySynthesis((items || []).map(normalizeStoredItem), periodLabel);
-
-    return NextResponse.json({
-      synthesis,
-      itemCount: items?.length || 0,
-      periodLabel,
-    });
-  } catch (error: any) {
-    console.error("Synthesis API error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal Server Error" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { items, periodLabel } = body;
-
-    const synthesis = await generateWeeklySynthesis(items || [], periodLabel || "This Week");
-
-    return NextResponse.json({ synthesis });
-  } catch (error: any) {
-    console.error("Synthesis POST API error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal Server Error" },
-      { status: 500 }
-    );
-  }
+    const params = new URL(request.url).searchParams;
+    const days = params.get("days") || "7";
+    if (days !== "7" && days !== "30" && days !== "all") return NextResponse.json({ error: "Choose 7, 30 or all days." }, { status: 400 });
+    const timezone = validTimezone(params.get("timezone")) || "UTC";
+    return NextResponse.json(await buildSundayReview(days, timezone, params.get("refresh") === "1"));
+  } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }

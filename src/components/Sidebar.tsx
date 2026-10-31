@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -31,34 +31,29 @@ const DEFAULT_WIDTH = 256;
 const MIN_WIDTH = 180;
 const COLLAPSE_THRESHOLD = 110;
 
+function subscribePreferences(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+function readOpen() { try { return localStorage.getItem("august-sidebar-open") !== "false"; } catch { return true; } }
+function readWidth() {
+  try { const value = Number(localStorage.getItem("august-sidebar-width")); return value >= MIN_WIDTH && value <= 600 ? value : DEFAULT_WIDTH; } catch { return DEFAULT_WIDTH; }
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null);
 
   // Sidebar Open / Width States
-  const [isOpen, setIsOpen] = useState(true);
-  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const storedOpen = useSyncExternalStore(subscribePreferences, readOpen, () => true);
+  const storedWidth = useSyncExternalStore(subscribePreferences, readWidth, () => DEFAULT_WIDTH);
+  const [openOverride, setIsOpen] = useState<boolean | null>(null);
+  const isOpen = openOverride ?? storedOpen;
+  const [widthOverride, setWidth] = useState<number | null>(null);
+  const width = widthOverride ?? storedWidth;
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const lastValidWidthRef = useRef(DEFAULT_WIDTH);
-
-  // Sync with localStorage on client mount
-  useEffect(() => {
-    try {
-      const savedOpen = localStorage.getItem("august-sidebar-open");
-      if (savedOpen !== null) {
-        setIsOpen(savedOpen === "true");
-      }
-      const savedWidth = localStorage.getItem("august-sidebar-width");
-      if (savedWidth) {
-        const parsed = parseInt(savedWidth, 10);
-        if (!isNaN(parsed) && parsed >= MIN_WIDTH && parsed <= 600) {
-          setWidth(parsed);
-          lastValidWidthRef.current = parsed;
-        }
-      }
-    } catch {}
-  }, []);
 
   // Google Calendar Status check
   useEffect(() => {
@@ -79,7 +74,7 @@ export function Sidebar() {
   // Toggle function with persistence
   const toggleSidebar = useCallback(() => {
     setIsOpen((prev) => {
-      const next = !prev;
+      const next = !(prev ?? readOpen());
       try {
         localStorage.setItem("august-sidebar-open", next ? "true" : "false");
       } catch {}

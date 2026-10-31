@@ -21,10 +21,10 @@ test('incidental words, tags, stale texture and calendar flags cannot override a
 });
 
 test('old category names still appear in the current clusters and review', () => {
-  for (const [old, current] of Object.entries({ Wishlist: 'Idea_Desire', Idea: 'Idea_Desire', Media: 'Media_Log', Learning: 'Perspective_Lesson', Done: 'Daily_Log' })) {
+  for (const [old, current] of Object.entries({ Wishlist: 'Wishlist', Idea: 'Idea', Media: 'Media_Log', Learning: 'Perspective_Lesson', Done: 'Daily_Log' })) {
     assert.equal(getClassification({ category: old }).category, current);
   }
-  for (const category of ['not-a-category', 'constructor', '__proto__', 'toString', '']) {
+  for (const category of ['constructor', '__proto__', 'toString', '']) {
     assert.equal(getClassification({ category }).texture, 'unclassified');
   }
 });
@@ -50,7 +50,7 @@ test('undated tasks and reminders retain their intent without a fabricated calen
 
 test('future calendar events require an obligation category and a valid future start', () => {
   const action = { is_actionable: true, start_time: future };
-  for (const category of CATEGORIES) {
+  for (const category of CATEGORIES.filter((category) => category !== 'Idea_Desire')) {
     const item = parse({ ...base, category, calendar_action: action, life_texture: 'hard_truth' });
     const expected = ['Task', 'Reminder', 'Event'].includes(category);
     assert.equal(item.calendar_action.is_actionable, expected);

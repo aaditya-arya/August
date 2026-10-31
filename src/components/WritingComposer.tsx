@@ -68,8 +68,10 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
     document.body.style.overflow = "hidden";
     const background = document.getElementById("writing-background");
     const sidebar = document.getElementById("app-sidebar");
+    const intentionBar = document.getElementById("intentions-bar");
     if (background) background.inert = true;
     if (sidebar) sidebar.inert = true;
+    if (intentionBar) intentionBar.inert = true;
     editorRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -82,6 +84,7 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
       document.body.style.overflow = previousOverflow;
       if (background) background.inert = false;
       if (sidebar) sidebar.inert = false;
+      if (intentionBar) intentionBar.inert = false;
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [isFocused]);

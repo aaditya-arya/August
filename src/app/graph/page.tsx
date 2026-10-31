@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Sparkles, Loader2, Network, RefreshCw, Layers, SlidersHorizontal } from "lucide-react";
+import { Sparkles, Loader2, Network, RefreshCw, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
+import type { ForceGraphMethods, LinkObject } from "react-force-graph-2d";
+import { SEMANTIC_SIMILARITY_THRESHOLD } from "@/lib/graph-config";
 import { CATEGORY_DEFINITIONS } from "@/lib/ledger";
 
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false }) as typeof import("react-force-graph-2d").default;
 
 const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
-  Object.entries(CATEGORY_DEFINITIONS).map(([key, value]) => [key, value.color])
+  [...Object.entries(CATEGORY_DEFINITIONS).map(([key, value]) => [key, value.color]), ["Unclassified", "#a1a1aa"]]
 );
 
 type Node = {
@@ -24,12 +26,19 @@ type Node = {
 
 type LinkItem = {
   id?: string;
-  source: any;
-  target: any;
+  source: string | Node;
+  target: string | Node;
   weight: number;
   link_type: "semantic" | "explicit_tag";
   value?: number;
 };
+
+async function fetchGraphData(signal?: AbortSignal): Promise<{ nodes: Node[]; links: LinkItem[] }> {
+  const response = await fetch("/api/graph", { signal });
+  if (!response.ok) throw new Error("Failed to fetch graph data");
+  const data = await response.json();
+  return { nodes: (data.nodes || []).map((node: Node) => ({ ...node, color: node.color || CATEGORY_COLORS[node.group] || CATEGORY_COLORS.Unclassified })), links: data.links || [] };
+}
 
 export default function BrainGraphPage() {
   const [rawNodes, setRawNodes] = useState<Node[]>([]);
@@ -37,11 +46,11 @@ export default function BrainGraphPage() {
   const [loading, setLoading] = useState(true);
   const [isRecomputing, setIsRecomputing] = useState(false);
   const [linkFilter, setLinkFilter] = useState<"all" | "semantic" | "explicit_tag">("all");
-  const [minWeight, setMinWeight] = useState<number>(0.70);
+  const [minWeight, setMinWeight] = useState<number>(SEMANTIC_SIMILARITY_THRESHOLD);
   const [showControls, setShowControls] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const fgRef = useRef<any>(null);
+  const fgRef = useRef<ForceGraphMethods<Node, LinkItem> | undefined>(undefined);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
@@ -60,28 +69,24 @@ export default function BrainGraphPage() {
   }, []);
 
   async function loadGraphData() {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await fetch("/api/graph");
-      if (!res.ok) throw new Error("Failed to fetch graph data");
-      const data = await res.json();
-
-      const nodes = (data.nodes || []).map((n: any) => ({
-        ...n,
-        color: CATEGORY_COLORS[n.group] || "#ec4899",
-      }));
-
-      setRawNodes(nodes);
-      setRawLinks(data.links || []);
-    } catch (err) {
-      console.error("Error loading graph data:", err);
-    } finally {
-      setLoading(false);
-    }
+      const data = await fetchGraphData();
+      setRawNodes(data.nodes); setRawLinks(data.links);
+    } catch (error) { console.error("Failed to load graph:", error); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
-    loadGraphData();
+    const controller = new AbortController();
+    fetchGraphData(controller.signal).then((data) => {
+      if (!controller.signal.aborted) { setRawNodes(data.nodes); setRawLinks(data.links); }
+    }).catch((error) => {
+      if (!controller.signal.aborted) console.error("Failed to load graph:", error);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
   }, []);
 
   // Filter links based on user controls
@@ -104,12 +109,12 @@ export default function BrainGraphPage() {
       const linkForce = fgRef.current.d3Force("link");
       if (linkForce) {
         linkForce
-          .distance((link: any) => {
+          .distance((link: LinkObject<Node, LinkItem>) => {
             // Heavier weight = shorter distance (pulls tightly together)
             const w = link.weight || 0.5;
             return Math.max(35, (1 - w) * 160 + 35);
           })
-          .strength((link: any) => {
+          .strength((link: LinkObject<Node, LinkItem>) => {
             // Heavier weight = stronger spring pull
             const w = link.weight || 0.5;
             return link.link_type === "explicit_tag" ? 0.75 : Math.max(0.2, w * 0.6);
@@ -236,9 +241,9 @@ export default function BrainGraphPage() {
               <span className="text-zinc-500 dark:text-muted font-semibold">Min Similarity:</span>
               <input
                 type="range"
-                min="0.65"
+                min={SEMANTIC_SIMILARITY_THRESHOLD}
                 max="0.95"
-                step="0.05"
+                step="0.01"
                 value={minWeight}
                 onChange={(e) => setMinWeight(parseFloat(e.target.value))}
                 className="w-24 accent-pink-500"
@@ -275,28 +280,28 @@ export default function BrainGraphPage() {
           </div>
         ) : (
           <>
-            <ForceGraph2D
+            <ForceGraph2D<Node, LinkItem>
               ref={fgRef}
               graphData={filteredGraphData}
               nodeLabel="name"
               nodeColor="color"
               nodeRelSize={6}
-              linkColor={(link: any) =>
+              linkColor={(link: LinkObject<Node, LinkItem>) =>
                 link.link_type === "explicit_tag"
                   ? "rgba(244, 114, 182, 0.75)"
                   : "rgba(148, 163, 184, 0.45)"
               }
-              linkWidth={(link: any) =>
+              linkWidth={(link: LinkObject<Node, LinkItem>) =>
                 link.link_type === "explicit_tag"
                   ? 2.5
                   : Math.max(1, (link.weight || 0.5) * 2.2)
               }
-              linkDirectionalParticles={(link: any) =>
+              linkDirectionalParticles={(link: LinkObject<Node, LinkItem>) =>
                 link.link_type === "explicit_tag" ? 2 : 0
               }
               linkDirectionalParticleSpeed={0.005}
               linkDirectionalParticleWidth={2}
-              linkLabel={(link: any) =>
+              linkLabel={(link: LinkObject<Node, LinkItem>) =>
                 link.link_type === "explicit_tag"
                   ? `Explicit Tag Bond (Weight: ${link.weight})`
                   : `Semantic Similarity: ${Math.round((link.weight || 0) * 100)}%`

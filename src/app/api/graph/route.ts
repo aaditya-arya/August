@@ -1,103 +1,36 @@
 import { NextResponse } from "next/server";
 import { getClassification } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
-import { backfillGraphEdges, computeEdgesInMemory } from "@/lib/graph";
+import { backfillGraphEdges } from "@/lib/graph";
+import type { GraphEdge, ExtractedItemNode } from "@/lib/graph-math";
+import { errorMessage } from "@/lib/errors";
 
+export const maxDuration = 300;
 export async function GET() {
   try {
-    // 1. Fetch nodes from extracted_items
-    const { data: items, error: itemsError } = await supabase
-      .from("extracted_items")
-      .select("id, category, content, tags, sentiment_or_mood, embedding, created_at")
-      .order("created_at", { ascending: false });
-
-    if (itemsError) {
-      console.error("Error fetching graph nodes:", itemsError);
-      return NextResponse.json({ error: itemsError.message }, { status: 500 });
+    const items: ExtractedItemNode[] = [];
+    const edges: GraphEdge[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from("extracted_items").select("id, category, content, tags, sentiment_or_mood, created_at").order("id").range(offset, offset + 499);
+      if (error) throw error;
+      items.push(...data);
+      if (data.length < 500) break;
     }
-
-    const allItems = items || [];
-
-    // 2. Fetch edges from graph_edges
-    let { data: edges, error: edgesError } = await supabase
-      .from("graph_edges")
-      .select("id, source_node_id, target_node_id, weight, link_type, created_at");
-
-    if (edgesError) {
-      console.warn("graph_edges table query warning (fallback to in-memory):", edgesError.message);
-      // Fallback: compute edges in-memory from embeddings and tags
-      edges = computeEdgesInMemory(allItems) as any[];
-    } else if ((!edges || edges.length === 0) && allItems.length > 1) {
-      console.log("No edges found in database. Initiating automatic edge computation...");
-      await backfillGraphEdges();
-      const { data: refreshedEdges } = await supabase
-        .from("graph_edges")
-        .select("id, source_node_id, target_node_id, weight, link_type, created_at");
-      edges = refreshedEdges || computeEdgesInMemory(allItems) as any[];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from("graph_edges").select("id, source_node_id, target_node_id, weight, link_type").order("id").range(offset, offset + 499);
+      if (error) throw error;
+      edges.push(...data as GraphEdge[]);
+      if (data.length < 500) break;
     }
-
-    const allEdges = edges || [];
-
-    // 3. Format response for react-force-graph-2d
-    const nodes = allItems.map((item) => ({
-      id: item.id,
-      name: item.content,
-      group: getClassification(item).category,
-      tags: item.tags || [],
-      sentiment_or_mood: item.sentiment_or_mood,
-      created_at: item.created_at,
-      val: Math.max(3, (item.tags?.length || 1) * 2),
-    }));
-
-    const validNodeIds = new Set(nodes.map((n) => n.id));
-
-    // Only include edges where both source and target exist in current node set
-    const links = allEdges
-      .filter(
-        (e) =>
-          validNodeIds.has(e.source_node_id) && validNodeIds.has(e.target_node_id)
-      )
-      .map((e) => ({
-        id: e.id,
-        source: e.source_node_id,
-        target: e.target_node_id,
-        weight: Number(e.weight) || 0.5,
-        link_type: e.link_type,
-        value: Number(e.weight) || 0.5,
-      }));
-
-    return NextResponse.json({
-      nodes,
-      links,
-      stats: {
-        nodeCount: nodes.length,
-        edgeCount: links.length,
-        semanticCount: links.filter((l) => l.link_type === "semantic").length,
-        tagCount: links.filter((l) => l.link_type === "explicit_tag").length,
-      },
-    });
-  } catch (error: any) {
-    console.error("Graph API Error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal Server Error" },
-      { status: 500 }
-    );
-  }
+    const nodes = items.map((item) => ({ id: item.id, name: item.content, group: getClassification(item).category, color: getClassification(item).color, tags: item.tags || [], sentiment_or_mood: item.sentiment_or_mood, created_at: item.created_at, val: Math.max(3, (item.tags?.length || 1) * 2) }));
+    const ids = new Set(nodes.map((node) => node.id));
+    const links = edges.filter((edge) => ids.has(edge.source_node_id) && ids.has(edge.target_node_id)).map((edge) => ({ id: edge.id, source: edge.source_node_id, target: edge.target_node_id, weight: Number(edge.weight), link_type: edge.link_type, value: Number(edge.weight) }));
+    return NextResponse.json({ nodes, links, stats: { nodeCount: nodes.length, edgeCount: links.length, semanticCount: links.filter((link) => link.link_type === "semantic").length, tagCount: links.filter((link) => link.link_type === "explicit_tag").length } });
+  } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
-
 export async function POST() {
   try {
     const result = await backfillGraphEdges();
-    return NextResponse.json({
-      success: true,
-      message: "Graph edges recomputed successfully",
-      ...result,
-    });
-  } catch (error: any) {
-    console.error("Graph Recompute Error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal Server Error" },
-      { status: 500 }
-    );
-  }
+    return NextResponse.json({ success: result.errors.length === 0, ...result }, { status: result.errors.length ? 500 : 200 });
+  } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }

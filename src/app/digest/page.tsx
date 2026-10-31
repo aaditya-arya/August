@@ -1,599 +1,74 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Sparkles, 
-  CheckCircle2, 
-  BookOpen, 
-  Loader2, 
-  TrendingDown, 
-  Coffee, 
-  ArrowLeft,
-  Quote,
-  Sparkle,
-  Compass,
-  RefreshCw,
-  Headphones
-} from "lucide-react";
-import { format, subDays } from "date-fns";
-import { groupByTexture, type LedgerItem } from "@/lib/ledger";
-import { resolveLifeTexture } from "@/lib/ledger-presentation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { ArrowLeft, ArrowUpRight, RefreshCw, MoveUpRight, Sun, Sprout, Repeat2, Clock3, Loader2 } from "lucide-react";
+import type { ReviewResponse } from "@/lib/review";
+import { ReviewInsight } from "@/components/ReviewInsight";
+import { IntentionCard } from "@/components/IntentionPlan";
+import { ReviewReflection } from "@/components/ReviewReflection";
+import { canonicalCategory } from "@/lib/ledger";
+import { inReviewPeriod } from "@/lib/review";
+import { refreshIntentions, useIntentions } from "@/lib/use-intentions";
 
-type DigestItem = LedgerItem;
+type Period = "7" | "30" | "all";
 
-type SynthesisData = {
-  headline: string;
-  narrative: string;
-  dominant_texture: string;
-  reflection_prompt: string;
-};
-
-function getRelativeTimeLabel(dateStr: string): string {
-  try {
-    const d = new Date(dateStr);
-    const now = new Date();
-    if (isNaN(d.getTime())) return "Recently";
-
-    const diffMs = now.getTime() - d.getTime();
-    if (diffMs < 0) return "Just now";
-
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return format(d, "MMM d");
-  } catch {
-    return "Recently";
-  }
-}
-
-export default function SundayDigestPage() {
-  const [period, setPeriod] = useState<"7" | "30" | "all">("7");
-  const [items, setItems] = useState<DigestItem[]>([]);
-  const [synthesis, setSynthesis] = useState<SynthesisData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [synthesisLoading, setSynthesisLoading] = useState(true);
+export default function SundayReviewPage() {
+  const live = useIntentions();
+  const [period, setPeriod] = useState<Period>("7");
+  const [data, setData] = useState<ReviewResponse | null>(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    fetch(`/api/digest/synthesis?days=${period}&timezone=${encodeURIComponent(zone)}${revision ? "&refresh=1" : ""}`, { signal: controller.signal })
+      .then(async (response) => { const value = await response.json(); if (!response.ok) throw new Error(value.error || "Could not prepare your review."); return value as ReviewResponse; })
+      .then((value) => { if (!controller.signal.aborted) { setData(value); setError(null); void refreshIntentions(); } })
+      .catch((failure) => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Could not prepare your review."); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [period, revision]);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        setSynthesisLoading(true);
-        
-        // 1. Fetch Items
-        const url = period === "all" ? "/api/items" : `/api/items?days=${period}`;
-        const res = await fetch(url);
-        let loadedItems: DigestItem[] = [];
-        if (res.ok) {
-          const data = await res.json();
-          loadedItems = data.items || [];
-          setItems(loadedItems);
-        }
+    const changed = () => { setLoading(true); setRevision((value) => value + 1); };
+    window.addEventListener("august-intentions-changed", changed);
+    return () => window.removeEventListener("august-intentions-changed", changed);
+  }, []);
 
-        // 2. Fetch AI Narrative Synthesis
-        const synthUrl = period === "all" ? "/api/digest/synthesis" : `/api/digest/synthesis?days=${period}`;
-        const synthRes = await fetch(synthUrl);
-        if (synthRes.ok) {
-          const synthData = await synthRes.json();
-          if (synthData.synthesis) {
-            setSynthesis(synthData.synthesis);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load Sunday Review:", err);
-      } finally {
-        setLoading(false);
-        setSynthesisLoading(false);
-      }
-    }
-    loadData();
-  }, [period]);
+  function refresh() { setLoading(true); setError(null); setRevision((value) => value + 1); }
+  function choose(value: Period) { if (value !== period) { setLoading(true); setData(null); setError(null); setPeriod(value); } }
+  const review = data?.review;
+  const finishes = data?.entries.filter((entry) => inReviewPeriod(entry, data.period) && (canonicalCategory(entry.category) === "Milestone_HardWork" || entry.review_state?.status === "completed")).length || 0;
+  const active = (live.loading ? data?.intentions || [] : live.intentions).filter((item) => !["completed", "released", "paused"].includes(item.status));
+  const resolved = (live.loading ? data?.intentions || [] : live.intentions).filter((item) => ["completed", "released", "paused"].includes(item.status));
+  const range = data ? `${data.period.start ? new Date(data.period.start).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "The beginning"} to ${new Date(data.period.end).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : "A little distance. A clearer view.";
+  return <div className="mx-auto max-w-5xl px-5 pb-24 pt-10 sm:px-8 lg:px-12">
+    <header className="mb-10 border-b border-border pb-8">
+      <Link href="/" className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted"><ArrowLeft size={12} />Back to your ledger</Link>
+      <div className="mt-7 flex flex-wrap items-end justify-between gap-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.22em] text-accent">Your Sunday Review</p><h1 className="mt-3 font-serif text-[clamp(2rem,4vw,3.2rem)] font-medium leading-tight tracking-[-.045em]">What moved. What mattered.</h1><p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">The effort you made, the life you experienced, and what you want to do with what comes next.</p></div><div className="flex items-center gap-2"><div className="inline-flex rounded-xl border border-border bg-surface p-1">{([["7", "This week"], ["30", "30 days"], ["all", "The bigger picture"]] as const).map(([value, label]) => <button key={value} onClick={() => choose(value)} aria-pressed={period === value} className={`rounded-lg px-3 py-2 text-[11px] font-medium ${period === value ? "bg-accent/10 text-accent" : "text-muted"}`}>{label}</button>)}</div><button onClick={refresh} disabled={loading} aria-label="Refresh your review" className="rounded-xl border border-border p-2.5 text-muted disabled:opacity-40"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button></div></div>
+      <p className="mt-5 text-[11px] text-muted">{range}{data ? ` | ${data.selected_count} ${data.selected_count === 1 ? "entry" : "entries"} in view, with earlier moments for context` : ""}</p>
+    </header>
 
-  const handleRefreshSynthesis = async () => {
-    if (synthesisLoading) return;
-    try {
-      setSynthesisLoading(true);
-      const synthUrl = period === "all" ? "/api/digest/synthesis" : `/api/digest/synthesis?days=${period}`;
-      const synthRes = await fetch(synthUrl);
-      if (synthRes.ok) {
-        const synthData = await synthRes.json();
-        if (synthData.synthesis) {
-          setSynthesis(synthData.synthesis);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to refresh synthesis:", err);
-    } finally {
-      setSynthesisLoading(false);
-    }
-  };
+    {loading && <div role="status" className="mb-9 rounded-2xl border border-border bg-surface p-7"><div className="flex items-center gap-3"><Loader2 size={17} className="animate-spin text-accent" /><p className="text-sm text-foreground">Looking for movement and meaning across your moments...</p></div><p className="mt-2 pl-7 text-xs text-muted">An older wish can connect to something you did later. Good experiences have room of their own.</p></div>}
+    {error && <div role="alert" className="mb-8 rounded-2xl border border-amber-500/20 p-6"><p className="text-sm">{error}</p><button onClick={refresh} className="mt-3 text-xs font-semibold text-accent">Try again</button></div>}
+    {!loading && data?.context_count === 0 && <div className="rounded-3xl border border-border bg-surface p-10 text-center"><Sun size={26} className="mx-auto text-accent" /><h2 className="mt-5 font-serif text-2xl">A review grows out of a life recorded.</h2><p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted">Start with something you did, something you felt, or something you still want. It does not have to be an achievement.</p><Link href="/" className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">Write a moment<ArrowUpRight size={14} /></Link></div>}
 
-  const groups = groupByTexture(items);
-  const hardWorkItems = groups.hard_work;
-  const quietMomentItems = groups.quiet_moment;
-  const hardTruthItems = groups.hard_truth;
-  const perspectiveItems = groups.perspective;
-  const ideaSparkItems = groups.idea_spark;
-  const mediaLogItems = groups.media_log;
+    {review && <div className="space-y-12">
+      <p className="max-w-3xl font-serif text-lg sm:text-xl leading-[1.8] tracking-[-.015em] text-foreground">{review.opening}</p>
+      {review.progress.length > 0 && <section><div className="mb-6 flex items-center gap-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[.04] px-5 py-4"><span className="font-serif text-4xl text-emerald-700 dark:text-emerald-300">{finishes || review.progress.length}</span><div><p className="text-sm font-medium">{finishes === 1 ? "A concrete finish" : "Concrete finishes"} recorded.</p><p className="mt-1 text-xs text-muted">Let that register before you look at what comes next.</p></div></div><div className="mb-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"><MoveUpRight size={17} /></span><div><h2 className="font-serif text-2xl tracking-[-.025em]">You moved something forward.</h2><p className="mt-1 text-xs text-muted">Real effort and follow-through. These deserve to register.</p></div></div><div className="grid gap-4 md:grid-cols-2">{review.progress.map((insight, index) => <ReviewInsight key={index} insight={insight} entries={data!.entries} tone="progress" />)}</div></section>}
+      {review.experiences.length > 0 && <section><div className="mb-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300"><Sun size={17} /></span><div><h2 className="font-serif text-2xl tracking-[-.025em]">This was life, too.</h2><p className="mt-1 text-xs text-muted">What you enjoyed, noticed, and might want to remember.</p></div></div><div className="grid gap-4 md:grid-cols-2">{review.experiences.map((insight, index) => <ReviewInsight key={index} insight={insight} entries={data!.entries} tone="experience" />)}</div></section>}
+      {review.lessons.length > 0 && <section><div className="mb-5 flex items-center gap-3"><Sprout size={20} className="text-accent" /><div><h2 className="font-serif text-2xl tracking-[-.025em]">What you can take from it.</h2><p className="mt-1 text-xs text-muted">Lessons and honest questions. A setback does not erase earlier progress.</p></div></div><div className="grid gap-4 md:grid-cols-2">{review.lessons.map((insight, index) => <ReviewInsight key={index} insight={insight} entries={data!.entries} />)}</div></section>}
+      {review.patterns.length > 0 && <section><div className="mb-5 flex items-center gap-3"><Repeat2 size={20} className="text-accent" /><div><h2 className="font-serif text-2xl tracking-[-.025em]">The thread between the moments.</h2><p className="mt-1 text-xs text-muted">Connections that become visible with a little distance.</p></div></div><div className="grid gap-4 md:grid-cols-2">{review.patterns.map((insight, index) => <ReviewInsight key={index} insight={insight} entries={data!.entries} />)}</div></section>}
+    </div>}
 
-  const today = new Date();
-  const startDate = period === "7" ? subDays(today, 7) : period === "30" ? subDays(today, 30) : null;
-  const periodLabelText = period === "7" ? "This Week" : period === "30" ? "Past 30 Days" : "All Time";
+    {!loading && data?.status === "unavailable" && data.context_count > 0 && <div className="mb-8 rounded-2xl border border-border bg-surface p-6"><p className="text-sm text-muted">{data.message}</p><button onClick={refresh} className="mt-3 text-xs font-semibold text-accent">Try preparing the reflection again</button></div>}
+    {data?.message && data.status === "ready" && <p className="mt-5 text-xs text-muted">{data.message}</p>}
 
-  return (
-    <div className="min-h-screen bg-background text-zinc-900 dark:text-zinc-100 selection:bg-rose-500/30 selection:text-rose-800 dark:selection:text-rose-200">
-      {/* Ambient Atmospheric Lighting */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-rose-600/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 left-1/3 w-[30rem] h-[30rem] bg-indigo-600/10 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative max-w-5xl mx-auto px-6 md:px-10 pt-12 md:pt-16 pb-24">
-        {/* Navigation & Period Filter Header */}
-        <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-rose-200/70 dark:border-white/10 pb-8">
-          <div>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors uppercase tracking-widest mb-3"
-            >
-              <ArrowLeft size={14} /> Back to Daily Ledger
-            </Link>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl md:text-4xl font-serif font-bold text-zinc-900 dark:text-white tracking-tight">
-                The Sunday Review
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                Ritual
-              </span>
-            </div>
-            <p className="text-zinc-600 dark:text-muted text-sm font-normal mt-1.5">
-              {startDate ? `${format(startDate, "MMMM d")} — ${format(today, "MMMM d, yyyy")}` : "Complete Life History"} • A synthesized reflection of your lived experience.
-            </p>
-          </div>
-
-          {/* Time Filter Buttons */}
-          <div className="inline-flex rounded-2xl border border-rose-200/70 dark:border-white/10 bg-rose-100/70 dark:bg-white/5 backdrop-blur-md p-1.5 shadow-xl text-xs font-medium self-start md:self-auto">
-            <button
-              onClick={() => setPeriod("7")}
-              className={`px-4 py-2 rounded-xl transition-all duration-300 ${
-                period === "7"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-900/40 font-semibold"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-white"
-              }`}
-            >
-              This Week
-            </button>
-            <button
-              onClick={() => setPeriod("30")}
-              className={`px-4 py-2 rounded-xl transition-all duration-300 ${
-                period === "30"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-900/40 font-semibold"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-white"
-              }`}
-            >
-              Last 30 Days
-            </button>
-            <button
-              onClick={() => setPeriod("all")}
-              className={`px-4 py-2 rounded-xl transition-all duration-300 ${
-                period === "all"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-900/40 font-semibold"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-white"
-              }`}
-            >
-              All Time
-            </button>
-          </div>
-        </header>
-
-        {loading ? (
-          <div className="py-32 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="animate-spin text-rose-500" size={38} />
-            <p className="text-sm font-serif italic text-zinc-600 dark:text-muted">Synthesizing your moments into a story...</p>
-          </div>
-        ) : items.length === 0 ? (
-          /* Empty Ledger State */
-          <div className="text-center py-24 border border-dashed border-rose-200/70 dark:border-white/10 rounded-3xl bg-white/70 dark:bg-white/[0.02] backdrop-blur-xl p-10 max-w-xl mx-auto">
-            <Compass className="mx-auto text-rose-600 dark:text-rose-400 mb-4 animate-pulse" size={36} />
-            <h2 className="text-2xl font-serif font-bold text-zinc-900 dark:text-white mb-2">No moments recorded for {periodLabelText.toLowerCase()}</h2>
-            <p className="text-zinc-600 dark:text-muted text-sm leading-relaxed mb-8">
-              The Sunday Review is born from your raw daily entries. Log your quiet walks, financial wins or losses, and lessons on the timeline.
-            </p>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-rose-500 to-pink-600 text-white px-6 py-3 rounded-2xl text-xs font-semibold shadow-lg shadow-rose-900/30 hover:opacity-95 transition-all"
-            >
-              <span>Write in Daily Ledger</span>
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            {/* 1. Spotify-Wrapped Style AI Synthesis & Headline Hero */}
-            <section className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white dark:from-white/[0.08] to-rose-50/60 dark:to-white/[0.02] border border-rose-200/70 dark:border-white/15 p-8 md:p-12 shadow-2xl backdrop-blur-2xl">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-rose-500/20 via-purple-500/10 to-transparent rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none" />
-
-              <div className="relative z-10">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="text-rose-600 dark:text-rose-400" size={18} />
-                    <span className="text-xs font-bold uppercase tracking-widest text-rose-700/90 dark:text-rose-300/90">
-                      Editorial Narrative Synthesis
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {synthesis?.dominant_texture && (
-                      <span className="text-xs font-medium text-purple-800 dark:text-purple-200 bg-purple-500/20 border border-purple-400/30 px-3 py-1 rounded-full">
-                        Rhythm: {synthesis.dominant_texture}
-                      </span>
-                    )}
-                    <button
-                      onClick={handleRefreshSynthesis}
-                      disabled={synthesisLoading}
-                      title="Regenerate Reflection"
-                      className="text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-white transition-colors p-1"
-                    >
-                      <RefreshCw size={14} className={synthesisLoading ? "animate-spin text-rose-600 dark:text-rose-400" : ""} />
-                    </button>
-                  </div>
-                </div>
-
-                {synthesisLoading ? (
-                  <div className="py-8 space-y-4">
-                    <div className="h-10 bg-rose-100/70 dark:bg-white/10 rounded-xl animate-pulse w-3/4" />
-                    <div className="h-5 bg-rose-100/70 dark:bg-white/5 rounded-lg animate-pulse w-full" />
-                    <div className="h-5 bg-rose-100/70 dark:bg-white/5 rounded-lg animate-pulse w-4/5" />
-                  </div>
-                ) : (
-                  <>
-                    {/* Massive Bold Headline */}
-                    <h2 className="text-3xl md:text-5xl font-serif font-medium tracking-tight text-zinc-900 dark:text-white mb-6 leading-tight">
-                      &ldquo;{synthesis?.headline || "A Week of Lived Truths"}&rdquo;
-                    </h2>
-
-                    {/* Editorial Synthesis Prose */}
-                    <p className="entry-copy text-zinc-700 dark:text-zinc-300 mb-8 max-w-3xl">
-                      {synthesis?.narrative}
-                    </p>
-
-                    {/* Deep Reflection Prompt Anchor */}
-                    {synthesis?.reflection_prompt && (
-                      <div className="pt-6 border-t border-rose-200/70 dark:border-white/10 flex flex-col md:flex-row items-start md:items-center gap-4 bg-white/70 dark:bg-white/[0.02] -mx-8 -mb-12 md:-mx-12 md:-mb-12 p-6 md:p-8 rounded-b-3xl">
-                        <Quote className="text-rose-600 dark:text-rose-400 shrink-0 rotate-180 opacity-80" size={24} />
-                        <div className="flex-1">
-                          <p className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-1">
-                            Sunday Contemplation
-                          </p>
-                          <p className="text-sm md:text-base font-serif italic text-zinc-800 dark:text-zinc-200">
-                            &ldquo;{synthesis.reflection_prompt}&rdquo;
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </section>
-
-            {/* 2. THE ANTI-DEFICIT TEXTURE SECTIONS
-                RULE: NEVER RENDER AN EMPTY STATE CARD WITH "0 ITEMS".
-                Only render categories that actually happened! */}
-            <div className="space-y-10">
-              
-              {(["actionable_obligation", "shaairi_quote", "daily_log", "unclassified"] as const).map((key) => groups[key].length > 0 && (
-                <section key={key} className="rounded-3xl border border-border bg-surface/70 p-8">
-                  <h3 className="text-xl font-serif font-bold mb-5">
-                    {{ actionable_obligation: "Tasks, Reminders & Events", shaairi_quote: "Shaairi & Quotes", daily_log: "Daily Life", unclassified: "Unclassified" }[key]}
-                    <span className="ml-3 text-xs text-muted">{groups[key].length} items</span>
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {groups[key].map((item) => (
-                      <article key={item.id} className="rounded-2xl border border-border p-5">
-                        <p className="text-xs text-muted mb-2">{resolveLifeTexture(item).label}</p>
-                        <p className="entry-copy text-foreground">{item.content}</p>
-                        <p className="text-xs text-muted mt-3">{format(new Date(item.event_timestamp || item.created_at), "MMM d, yyyy")}</p>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
-
-              {/* SECTION: The Quiet Moments (Large, isolated, expansive serif typography) */}
-              {quietMomentItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-purple-100/60 dark:from-purple-950/20 via-purple-100/60 dark:via-purple-900/10 to-transparent border border-purple-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-purple-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-700 dark:text-purple-300">
-                        <Coffee size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-purple-950 dark:text-purple-100">
-                          The Quiet Moments
-                        </h3>
-                        <p className="text-xs text-purple-700 dark:text-purple-300/70">
-                          Micro-moments, conversations, evening walks, unquantifiable warmth
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-purple-800 dark:text-purple-200 bg-purple-500/20 px-3 py-1 rounded-full border border-purple-400/30">
-                      {quietMomentItems.length} {quietMomentItems.length === 1 ? "moment" : "moments"}
-                    </span>
-                  </div>
-
-                  {/* Editorial Flow for Quiet Moments: Large typography, forcing the user to pause and savor */}
-                  <div className="grid grid-cols-1 gap-6">
-                    {quietMomentItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="relative p-6 md:p-8 rounded-2xl bg-white/70 dark:bg-white/[0.03] hover:bg-white/70 dark:hover:bg-white/[0.05] border border-purple-400/15 transition-all duration-300 group"
-                      >
-                        <Quote className="absolute top-6 left-6 text-purple-600/20 dark:text-purple-400/20 group-hover:text-purple-600/40 dark:group-hover:text-purple-400/40 transition-colors" size={32} />
-                        <div className="relative z-10 pl-6 md:pl-8">
-                          <p className="font-serif italic text-lg md:text-2xl text-purple-950 dark:text-purple-100 leading-relaxed tracking-wide">
-                            &ldquo;{item.content}&rdquo;
-                          </p>
-                          <div className="mt-4 flex items-center gap-3">
-                            <span className="text-xs font-medium text-purple-700 dark:text-purple-300/60">
-                              {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                            </span>
-                            {item.sentiment_or_mood && (
-                              <span className="text-[11px] font-medium text-purple-700 dark:text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-400/20">
-                                {item.sentiment_or_mood}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-              {/* SECTION: The Costs & Hard Truths (Stark, grounded, solemn stone aesthetic) */}
-              {hardTruthItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-amber-100/60 dark:from-amber-950/20 via-stone-100/60 dark:via-stone-900/30 to-transparent border border-amber-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-amber-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-700 dark:text-amber-300">
-                        <TrendingDown size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-amber-950 dark:text-amber-100">
-                          The Costs & Hard Truths
-                        </h3>
-                        <p className="text-xs text-amber-700 dark:text-amber-300/70">
-                          Financial expenses, trading losses, hard lessons to face with composure
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-200 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-400/30">
-                      {hardTruthItems.length} {hardTruthItems.length === 1 ? "truth" : "truths"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {hardTruthItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 rounded-2xl bg-stone-100/80 dark:bg-stone-900/60 border border-amber-500/20 hover:border-amber-500/40 transition-all flex flex-col justify-between"
-                      >
-                        <p className="text-zinc-900 dark:text-zinc-100 entry-copy mb-3">
-                          {item.content}
-                        </p>
-                        <div className="flex items-center justify-between pt-3 border-t border-rose-200/70 dark:border-white/5 text-xs">
-                          <span className="text-amber-600/80 dark:text-amber-400/80 font-sans font-semibold">
-                            Facing Reality
-                          </span>
-                          <span className="text-zinc-600 dark:text-muted">
-                            {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-              {/* SECTION: The Hard Work & Milestones (Punchy, energetic, momentum-driven) */}
-              {hardWorkItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-emerald-100/60 dark:from-emerald-950/20 via-emerald-100/60 dark:via-emerald-900/10 to-transparent border border-emerald-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-emerald-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-700 dark:text-emerald-300">
-                        <CheckCircle2 size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-emerald-950 dark:text-emerald-100">
-                          The Hard Work & Milestones
-                        </h3>
-                        <p className="text-xs text-emerald-700 dark:text-emerald-300/70">
-                          PRs cleared, assignments submitted, code shipped, discipline honored
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-400/30">
-                      {hardWorkItems.length} {hardWorkItems.length === 1 ? "win" : "wins"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {hardWorkItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 rounded-2xl bg-emerald-100/60 dark:bg-emerald-950/30 border border-emerald-500/20 hover:border-emerald-500/40 transition-all flex flex-col justify-between"
-                      >
-                        <p className="text-emerald-950 dark:text-emerald-100 font-semibold text-sm md:text-base leading-relaxed mb-3">
-                          {item.content}
-                        </p>
-                        <div className="flex items-center justify-between pt-3 border-t border-emerald-500/10 text-xs">
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Milestone
-                          </span>
-                          <span className="text-zinc-600 dark:text-muted">
-                            {getRelativeTimeLabel(item.event_timestamp || item.created_at)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-              {/* SECTION: Perspectives & Insights (Literary bookplate aesthetic) */}
-              {perspectiveItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-rose-100/60 dark:from-rose-950/20 via-pink-100/60 dark:via-pink-900/10 to-transparent border border-rose-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-rose-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-rose-500/20 border border-rose-400/30 flex items-center justify-center text-rose-700 dark:text-rose-300">
-                        <BookOpen size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-rose-950 dark:text-rose-100">
-                          Perspectives & Insights
-                        </h3>
-                        <p className="text-xs text-rose-700 dark:text-rose-300/70">
-                          Book reflections, philosophical shifts, wisdom harvested
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-rose-800 dark:text-rose-200 bg-rose-500/20 px-3 py-1 rounded-full border border-rose-400/30">
-                      {perspectiveItems.length} {perspectiveItems.length === 1 ? "insight" : "insights"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4">
-                    {perspectiveItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-6 rounded-2xl bg-white/70 dark:bg-white/[0.03] border border-rose-500/20 hover:border-rose-500/40 transition-all flex flex-col justify-between"
-                      >
-                        <p className="font-serif text-rose-950 dark:text-rose-100 entry-copy mb-3">
-                          &ldquo;{item.content}&rdquo;
-                        </p>
-                        <div className="flex items-center justify-between pt-3 border-t border-rose-500/10 text-xs text-rose-700 dark:text-rose-300/70">
-                          <span>Wisdom & Perspective</span>
-                          <span>{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-              {/* SECTION: Ideas & Sparks */}
-              {ideaSparkItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-blue-100/60 dark:from-blue-950/20 via-indigo-100/60 dark:via-indigo-900/10 to-transparent border border-blue-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-blue-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-700 dark:text-blue-300">
-                        <Sparkle size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-blue-950 dark:text-blue-100">
-                          Ideas & Sparks
-                        </h3>
-                        <p className="text-xs text-blue-700 dark:text-blue-300/70">
-                          Concepts, future desires, product seeds
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-200 bg-blue-500/20 px-3 py-1 rounded-full border border-blue-400/30">
-                      {ideaSparkItems.length}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {ideaSparkItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 rounded-2xl bg-blue-100/60 dark:bg-blue-950/30 border border-blue-500/20 hover:border-blue-500/40 transition-all flex flex-col justify-between"
-                      >
-                        <p className="text-blue-950 dark:text-blue-100 entry-copy mb-3">
-                          {item.content}
-                        </p>
-                        <div className="flex items-center justify-between pt-3 border-t border-blue-500/10 text-xs text-blue-700 dark:text-blue-300/70">
-                          <span>Spark</span>
-                          <span>{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-              {/* SECTION: Media & Cultural Intake */}
-              {mediaLogItems.length > 0 && (
-                <motion.section
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-3xl bg-gradient-to-b from-indigo-100/60 dark:from-indigo-950/20 via-slate-100/60 dark:via-slate-900/20 to-transparent border border-indigo-500/20 p-8 md:p-10 shadow-xl"
-                >
-                  <div className="flex items-center justify-between mb-8 pb-4 border-b border-indigo-500/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-700 dark:text-indigo-300">
-                        <Headphones size={18} />
-                      </div>
-                      <div>
-                        <h3 className="text-xl md:text-2xl font-serif font-bold text-indigo-950 dark:text-indigo-100">
-                          Media & Cultural Intake
-                        </h3>
-                        <p className="text-xs text-indigo-700 dark:text-indigo-300/70">
-                          Music, cinema, anime, gaming & cultural resonance
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-indigo-800 dark:text-indigo-200 bg-indigo-500/20 px-3 py-1 rounded-full border border-indigo-400/30">
-                      {mediaLogItems.length} {mediaLogItems.length === 1 ? "piece" : "pieces"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {mediaLogItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-5 rounded-2xl bg-indigo-100/60 dark:bg-indigo-950/30 border border-indigo-500/20 hover:border-indigo-500/40 transition-all flex flex-col justify-between"
-                      >
-                        <p className="text-indigo-950 dark:text-indigo-100 entry-copy mb-3">
-                          {item.content}
-                        </p>
-                        <div className="flex items-center justify-between pt-3 border-t border-indigo-500/10 text-xs text-indigo-700 dark:text-indigo-300/70">
-                          <span className="flex items-center gap-1 font-medium">
-                            <Headphones size={12} /> Intake
-                          </span>
-                          <span>{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    {active.length > 0 && <section className="mt-12"><div className="mb-5 flex items-center gap-3"><Clock3 size={20} className="text-accent" /><div><h2 className="font-serif text-2xl tracking-[-.025em]">What still matters enough to choose.</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted">A wish can become a plan, stay a wish, or be something you let go. Older intentions stay here even when you did not write about them this week.</p></div></div><div className="grid gap-4 md:grid-cols-2">{active.slice(0, 3).map((intention) => <IntentionCard key={`${intention.anchor_id}:${intention.state?.updated_at || ""}`} intention={intention} />)}</div></section>}
+    {active.length > 3 && <details className="mt-5 rounded-2xl border border-border p-5"><summary className="cursor-pointer text-sm font-medium text-muted">The rest can wait here ({active.length - 3})</summary><p className="mt-3 text-xs leading-relaxed text-muted">You do not have to turn every interest into a project. These wishes can simply stay available.</p><div className="mt-5 grid gap-4 md:grid-cols-2">{active.slice(3).map((intention) => <IntentionCard key={`${intention.anchor_id}:${intention.state?.updated_at || ""}`} intention={intention} compact />)}</div></details>}
+    {resolved.length > 0 && <details className="mt-8 rounded-2xl border border-border p-5"><summary className="cursor-pointer text-sm font-medium text-muted">The things you followed through on, paused, or let go ({resolved.length})</summary><div className="mt-5 grid gap-4 md:grid-cols-2">{resolved.map((intention) => <IntentionCard key={`${intention.anchor_id}:${intention.state?.updated_at || ""}`} intention={intention} compact />)}</div></details>}
+    {review?.next_step && <section className="mt-12 border-y border-border py-8"><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-accent">One thing for the week ahead</p><h2 className="mt-3 font-serif text-2xl leading-relaxed">{review.next_step.title}</h2><p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">{review.next_step.takeaway}</p></section>}
+    {review && <div className="mt-12"><ReviewReflection question={review.question} onSaved={() => { setLoading(true); setRevision((value) => value + 1); }} /></div>}
+  </div>;
 }

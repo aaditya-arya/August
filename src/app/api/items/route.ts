@@ -1,5 +1,6 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
-import { normalizeStoredItem } from "@/lib/ledger";
+import { normalizeStoredItem, categoryStorageValues } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(request: Request) {
@@ -15,13 +16,14 @@ export async function GET(request: Request) {
       .order("event_timestamp", { ascending: false });
 
     if (category) {
-      query = query.eq("category", category);
+      query = query.in("category", categoryStorageValues(category));
     } else if (categories) {
-      const catList = categories.split(",").map((c) => c.trim());
+      const catList = categories.split(",").flatMap((c) => categoryStorageValues(c.trim()));
       query = query.in("category", catList);
     }
 
-    if (days) {
+    if (days && days !== "all") {
+      if (!/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 36500) return NextResponse.json({ error: "Invalid days parameter." }, { status: 400 });
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - parseInt(days, 10));
       query = query.gte("event_timestamp", cutoff.toISOString());
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ items: (data || []).map(normalizeStoredItem) });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

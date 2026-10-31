@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "tsc -p tsconfig.test.json && node --test tests/*.test.cjs",
     "test:ai": "tsc -p tsconfig.test.json && node tests/live-extraction.cjs",
-    "repair:classifications": "tsc -p tsconfig.test.json && node scripts/repair-classifications.cjs"
+    "repair:classifications": "tsc -p tsconfig.test.json && node scripts/repair-classifications.cjs",
+    "test:taxonomy": "tsc -p tsconfig.test.json && node tests/live-taxonomy.cjs",
+    "test:review": "tsc -p tsconfig.test.json && node tests/live-review.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",

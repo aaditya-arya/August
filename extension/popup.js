@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // 1. Get active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-      if (!tab || !tab.url || !tab.url.includes("keep.google.com")) {
+      if (!tab || !tab.url || new URL(tab.url).hostname !== "keep.google.com") {
         statusSpinner.classList.add("hidden");
         statusText.innerText = "⚠️ Please open https://keep.google.com in your active tab before clicking sync.";
         syncBtn.disabled = false;
@@ -29,58 +29,10 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.innerText = "Reading DOM and extracting Keep cards...";
 
       // 2. Execute scraping script in active tab
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: () => {
-          const notes = [];
-          const cardElements = document.querySelectorAll(
-            'div.IZ65Rd-TBnAttached, div.IZ65Rd-n0tgOf-ibnC6b, div[role="listitem"], .gKe0He-bN97ce'
-          );
-
-          const processedTexts = new Set();
-
-          cardElements.forEach((card) => {
-            const titleEl = card.querySelector(
-              '.IZ65Rd-rymPhb, div[aria-label="Title"], .h1U9Be-rymPhb, .notetitle'
-            );
-            const title = titleEl ? titleEl.innerText.trim() : "";
-
-            const listItems = Array.from(
-              card.querySelectorAll('div[role="checkbox"], .L97FXe-bN97ce, .IZ65Rd-haAclf')
-            )
-              .map((el) => {
-                const isChecked = el.getAttribute("aria-checked") === "true";
-                const label = el.innerText.trim();
-                return isChecked ? `[x] ${label}` : `[ ] ${label}`;
-              })
-              .filter((item) => item.length > 4);
-
-            const bodyEl = card.querySelector(
-              '.IZ65Rd-haAclf, div[aria-label="Note"], .notetext, .XQLv7d'
-            );
-            let bodyText = bodyEl ? bodyEl.innerText.trim() : "";
-
-            let content = "";
-            if (listItems.length > 0) {
-              content = listItems.join("\n");
-            } else if (bodyText) {
-              content = bodyText;
-            } else {
-              content = card.innerText.replace(title, "").trim();
-            }
-
-            if (content && !processedTexts.has(title + content)) {
-              processedTexts.add(title + content);
-              notes.push({
-                title: title || undefined,
-                content: content,
-                source: "google_keep_dom_sync",
-              });
-            }
-          });
-
-          return notes;
-        },
+        func: () => globalThis.augustScrapeKeepNotes(),
       });
 
       const notes = results?.[0]?.result || [];
@@ -114,10 +66,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await response.json();
 
       statusSpinner.classList.add("hidden");
-      statusText.innerText = `✅ Successfully synced to Write!`;
+      statusText.innerText = data.failedCount ? `Saved ${notes.length - data.failedCount} notes; ${data.failedCount} failed. Retry to save the remaining notes without duplicating successful imports.` : "Successfully synced to Write!";
       
       scrapedCount.innerText = notes.length;
-      extractedCount.innerText = data.itemsExtracted || notes.length;
+      extractedCount.innerText = data.itemsExtracted ?? 0;
       resultBox.classList.remove("hidden");
 
     } catch (err) {

@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { Folders, Search, ArrowRight, Loader2, X, Calendar } from "lucide-react";
 import { format } from "date-fns";
-import { CATEGORIES, getClassification, normalizeStoredItem, type LedgerItem } from "@/lib/ledger";
-import { generateGoogleCalendarUrl } from "@/lib/calendar";
+import { groupByCategory, getClassification, normalizeStoredItem, type LedgerItem } from "@/lib/ledger";
+import { generateGoogleCalendarUrl, shouldOfferCalendarAdd } from "@/lib/calendar";
 
 type Item = LedgerItem;
 
@@ -32,10 +32,8 @@ export default function ClustersPage() {
     loadItems();
   }, []);
 
-  const clusterCards = [...CATEGORIES, ...(items.some((item) => item.category === "Unclassified") ? ["Unclassified"] : [])].map((category) => ({
-    id: category,
-    name: getClassification({ category }).label,
-    count: items.filter((item) => item.category === category).length,
+  const clusterCards = groupByCategory(items).map((group) => ({
+    id: group.category, name: group.label, count: group.items.length,
     color: "bg-surface border-border text-foreground hover:border-accent/40",
     badge: "bg-accent/10 text-accent",
   }));
@@ -198,7 +196,8 @@ export default function ClustersPage() {
                           <Calendar size={14} className="text-pink-500 shrink-0" />
                           <span>{item.category}: {item.calendar_action.title || "Scheduled item"}</span>
                         </div>
-                        <a
+                        {item.calendar_status === "synced" && <span className="text-xs text-muted">Synced to Google Calendar</span>}
+                        {shouldOfferCalendarAdd(item) && <a
                           href={generateGoogleCalendarUrl(item.calendar_action, item.content)}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -206,7 +205,7 @@ export default function ClustersPage() {
                         >
                           <Calendar size={13} />
                           Add to Google Calendar
-                        </a>
+                        </a>}
                       </div>
                     )}
                   </div>

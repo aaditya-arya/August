@@ -12,14 +12,14 @@ create table if not exists notes (
 create table if not exists extracted_items (
   id uuid primary key default gen_random_uuid(),
   note_id uuid references notes(id) on delete cascade not null,
-  category text not null, -- Canonical categories in src/lib/ledger.ts. life_texture is derived in the app, not a database column.
+  category text not null, -- Open, AI-reviewed category names. Starter styles in src/lib/ledger.ts are not an enum; life_texture is derived.
   content text not null,
   tags text[] default '{}',
   sentiment_or_mood text,
   event_timestamp timestamp with time zone default timezone('utc'::text, now()) not null,
   google_event_id text default null,
   calendar_status text default 'none', -- 'none', 'pending', 'synced', 'failed'
-  calendar_action jsonb default null, -- { is_actionable: boolean, title: text, start_time: text, end_time: text }
+  calendar_action jsonb default null, -- Scheduling fields plus optional versioned review_state for user-authored plans; review_state never activates Calendar.
   embedding vector(768), -- Gemini text-embedding-004 produces 768-dimensional vectors
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -34,6 +34,7 @@ alter table extracted_items add column if not exists calendar_action jsonb defau
 create index if not exists idx_extracted_items_embedding on extracted_items using hnsw (embedding vector_cosine_ops);
 create index if not exists idx_extracted_items_event_timestamp on extracted_items(event_timestamp);
 create index if not exists idx_extracted_items_category on extracted_items(category);
+create index if not exists idx_extracted_items_tags on extracted_items using gin(tags);
 create index if not exists idx_extracted_items_gcal_id on extracted_items(google_event_id);
 
 -- Create the graph_edges table (Links and relationships between nodes in the Brain Graph)

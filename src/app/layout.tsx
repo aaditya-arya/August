@@ -1,3 +1,4 @@
+import { IntentionsBar } from "@/components/IntentionsBar";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -53,7 +54,8 @@ export default function RootLayout({
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col md:flex-row selection:bg-rose-500/30 selection:text-rose-900 dark:selection:text-rose-200 antialiased">
         <Sidebar />
-        <main className="flex-1 min-w-0 overflow-y-auto relative min-h-screen bg-background">
+        <main className="flex-1 min-w-0 relative min-h-screen bg-background md:h-dvh md:min-h-0 md:overflow-y-auto">
+          <IntentionsBar />
           {children}
         </main>
       </body>

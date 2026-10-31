@@ -40,6 +40,6 @@ export default function manifest(): MetadataRoute.Manifest {
         text: "text",
         url: "url",
       },
-    } as any,
+    },
   };
 }

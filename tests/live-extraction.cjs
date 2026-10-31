@@ -11,8 +11,8 @@ const fixtures = [
   ['Paid wifi bill 800.', 'Hard_Truth'],
   ['Pay the wifi bill tomorrow.', 'Task'],
   ['Hit my savings goal after six months of hard work.', 'Milestone_HardWork'],
-  ['Wish I had a Keychron keyboard when the sale starts.', 'Idea_Desire'],
-  ['Want to watch Batman someday.', 'Idea_Desire'],
+  ['Wish I had a Keychron keyboard when the sale starts.', 'Wishlist'],
+  ['Want to watch Batman someday.', 'Wishlist'],
   ['Listened to the song Lost on the radio.', 'Media_Log'],
   ['Launched my music app after a year of development.', 'Milestone_HardWork'],
   ['Learned that rest matters more than constant productivity.', 'Perspective_Lesson'],
@@ -23,7 +23,7 @@ const fixtures = [
   ['The dentist appointment was cancelled; I will stay home.', 'Daily_Log'],
   ['Need to write the feature list tonight.', 'Task'],
   ['Need to call the bank about my debit card tomorrow.', 'Reminder'],
-  ['Should add Mirzapur to my watchlist since Arjun recommended it.', 'Idea_Desire'],
+  ['Should add Mirzapur to my watchlist since Arjun recommended it.', 'Wishlist'],
   ['Finished reading Deep Work.', 'Media_Log'],
 ];
 

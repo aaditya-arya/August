@@ -9,5 +9,5 @@
     "rootDir": "src/lib",
     "outDir": ".test-build"
   },
-  "include": ["src/lib/ledger.ts", "src/lib/gemini.ts"]
+  "include": ["src/lib/ledger.ts", "src/lib/gemini.ts", "src/lib/async.ts", "src/lib/time.ts", "src/lib/calendar.ts", "src/lib/calendar-session.ts", "src/lib/calendar-server.ts", "src/lib/ingestion-core.ts", "src/lib/graph-math.ts", "src/lib/graph.ts", "src/lib/share-bridge.ts", "src/lib/category-catalogue.ts"]
 }
