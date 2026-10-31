@@ -94,6 +94,10 @@ export async function POST(request: Request) {
               .insert(inserts)
               .select();
 
+            if (extractErr) {
+              throw new Error(`The raw imported note was saved, but its classified items could not be saved: ${extractErr.message}`);
+            }
+
             if (!extractErr && insertedData) {
               allInsertedNodes.push(...insertedData);
               totalExtracted += insertedData.length;

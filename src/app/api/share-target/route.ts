@@ -12,7 +12,7 @@ async function processSharedText(title?: string, text?: string, url?: string) {
   ].filter(Boolean);
 
   const rawContent = parts.join("\n\n").trim();
-  if (!rawContent) return null;
+  if (!rawContent) throw new Error("Shared content is required.");
 
   const clientNow = new Date().toISOString();
   const clientTz = "UTC";
@@ -26,7 +26,7 @@ async function processSharedText(title?: string, text?: string, url?: string) {
 
   if (noteError || !noteData) {
     console.error("Share target note insert error:", noteError);
-    return null;
+    throw new Error("The shared note could not be saved.");
   }
 
   // 2. Extract items via Gemini (using Bulk Paste & Split Protocol)
@@ -65,6 +65,10 @@ async function processSharedText(title?: string, text?: string, url?: string) {
       .from("extracted_items")
       .insert(inserts)
       .select();
+
+    if (extractError) {
+      throw new Error(`The raw shared note was saved, but its classified items could not be saved: ${extractError.message}`);
+    }
 
     if (!extractError && insertedData) {
       insertedNodes = insertedData;

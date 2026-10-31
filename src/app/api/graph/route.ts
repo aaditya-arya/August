@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getClassification } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
 import { backfillGraphEdges, computeEdgesInMemory } from "@/lib/graph";
 
@@ -41,7 +42,7 @@ export async function GET() {
     const nodes = allItems.map((item) => ({
       id: item.id,
       name: item.content,
-      group: item.category,
+      group: getClassification(item).category,
       tags: item.tags || [],
       sentiment_or_mood: item.sentiment_or_mood,
       created_at: item.created_at,

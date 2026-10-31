@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { normalizeStoredItem } from "@/lib/ledger";
 import { generateWeeklySynthesis } from "@/lib/gemini";
 
 export async function GET(request: Request) {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("extracted_items")
-      .select("id, content, category, tags, sentiment_or_mood, event_timestamp, created_at")
+      .select("id, content, category, tags, sentiment_or_mood, event_timestamp, created_at, calendar_action")
       .order("event_timestamp", { ascending: false });
 
     let periodLabel = "All Time";
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const synthesis = await generateWeeklySynthesis(items || [], periodLabel);
+    const synthesis = await generateWeeklySynthesis((items || []).map(normalizeStoredItem), periodLabel);
 
     return NextResponse.json({
       synthesis,

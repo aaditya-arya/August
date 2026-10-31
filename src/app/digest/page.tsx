@@ -8,7 +8,6 @@ import {
   Loader2, 
   TrendingDown, 
   Coffee, 
-  CalendarDays, 
   ArrowLeft,
   Quote,
   Sparkle,
@@ -17,20 +16,12 @@ import {
   Headphones
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { resolveLifeTexture } from "@/app/page";
+import { groupByTexture, type LedgerItem } from "@/lib/ledger";
+import { resolveLifeTexture } from "@/lib/ledger-presentation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
-type DigestItem = {
-  id: string;
-  category: string;
-  life_texture?: string;
-  content: string;
-  tags?: string[];
-  sentiment_or_mood?: string;
-  event_timestamp: string;
-  created_at: string;
-};
+type DigestItem = LedgerItem;
 
 type SynthesisData = {
   headline: string;
@@ -119,13 +110,13 @@ export default function SundayDigestPage() {
     }
   };
 
-  // Group items by life texture
-  const hardWorkItems = items.filter((i) => resolveLifeTexture(i as any).key === "hard_work");
-  const quietMomentItems = items.filter((i) => resolveLifeTexture(i as any).key === "quiet_moment");
-  const hardTruthItems = items.filter((i) => resolveLifeTexture(i as any).key === "hard_truth");
-  const perspectiveItems = items.filter((i) => resolveLifeTexture(i as any).key === "perspective");
-  const ideaSparkItems = items.filter((i) => resolveLifeTexture(i as any).key === "idea_spark");
-  const mediaLogItems = items.filter((i) => resolveLifeTexture(i as any).key === "media_log");
+  const groups = groupByTexture(items);
+  const hardWorkItems = groups.hard_work;
+  const quietMomentItems = groups.quiet_moment;
+  const hardTruthItems = groups.hard_truth;
+  const perspectiveItems = groups.perspective;
+  const ideaSparkItems = groups.idea_spark;
+  const mediaLogItems = groups.media_log;
 
   const today = new Date();
   const startDate = period === "7" ? subDays(today, 7) : period === "30" ? subDays(today, 30) : null;
@@ -259,7 +250,7 @@ export default function SundayDigestPage() {
                   <>
                     {/* Massive Bold Headline */}
                     <h2 className="text-3xl md:text-5xl font-serif font-medium tracking-tight text-zinc-900 dark:text-white mb-6 leading-tight">
-                      "{synthesis?.headline || "A Week of Lived Truths"}"
+                      &ldquo;{synthesis?.headline || "A Week of Lived Truths"}&rdquo;
                     </h2>
 
                     {/* Editorial Synthesis Prose */}
@@ -276,7 +267,7 @@ export default function SundayDigestPage() {
                             Sunday Contemplation
                           </p>
                           <p className="text-sm md:text-base font-serif italic text-zinc-800 dark:text-zinc-200">
-                            "{synthesis.reflection_prompt}"
+                            &ldquo;{synthesis.reflection_prompt}&rdquo;
                           </p>
                         </div>
                       </div>
@@ -291,6 +282,24 @@ export default function SundayDigestPage() {
                 Only render categories that actually happened! */}
             <div className="space-y-10">
               
+              {(["actionable_obligation", "shaairi_quote", "daily_log", "unclassified"] as const).map((key) => groups[key].length > 0 && (
+                <section key={key} className="rounded-3xl border border-border bg-surface/70 p-8">
+                  <h3 className="text-xl font-serif font-bold mb-5">
+                    {{ actionable_obligation: "Tasks, Reminders & Events", shaairi_quote: "Shaairi & Quotes", daily_log: "Daily Life", unclassified: "Unclassified" }[key]}
+                    <span className="ml-3 text-xs text-muted">{groups[key].length} items</span>
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {groups[key].map((item) => (
+                      <article key={item.id} className="rounded-2xl border border-border p-5">
+                        <p className="text-xs text-muted mb-2">{resolveLifeTexture(item).label}</p>
+                        <p className="entry-copy text-foreground">{item.content}</p>
+                        <p className="text-xs text-muted mt-3">{format(new Date(item.event_timestamp || item.created_at), "MMM d, yyyy")}</p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
+
               {/* SECTION: The Quiet Moments (Large, isolated, expansive serif typography) */}
               {quietMomentItems.length > 0 && (
                 <motion.section
@@ -327,7 +336,7 @@ export default function SundayDigestPage() {
                         <Quote className="absolute top-6 left-6 text-purple-600/20 dark:text-purple-400/20 group-hover:text-purple-600/40 dark:group-hover:text-purple-400/40 transition-colors" size={32} />
                         <div className="relative z-10 pl-6 md:pl-8">
                           <p className="font-serif italic text-lg md:text-2xl text-purple-950 dark:text-purple-100 leading-relaxed tracking-wide">
-                            "{item.content}"
+                            &ldquo;{item.content}&rdquo;
                           </p>
                           <div className="mt-4 flex items-center gap-3">
                             <span className="text-xs font-medium text-purple-700 dark:text-purple-300/60">
@@ -477,7 +486,7 @@ export default function SundayDigestPage() {
                         className="p-6 rounded-2xl bg-white/70 dark:bg-white/[0.03] border border-rose-500/20 hover:border-rose-500/40 transition-all flex flex-col justify-between"
                       >
                         <p className="font-serif text-rose-950 dark:text-rose-100 entry-copy mb-3">
-                          "{item.content}"
+                          &ldquo;{item.content}&rdquo;
                         </p>
                         <div className="flex items-center justify-between pt-3 border-t border-rose-500/10 text-xs text-rose-700 dark:text-rose-300/70">
                           <span>Wisdom & Perspective</span>

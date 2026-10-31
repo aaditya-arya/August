@@ -20,220 +20,8 @@ import { generateGoogleCalendarUrl } from "@/lib/calendar";
 import Link from "next/link";
 import { WritingComposer } from "@/components/WritingComposer";
 
-export type LedgerItem = {
-  id: string;
-  category: string;
-  life_texture?: string;
-  content: string;
-  tags?: string[];
-  sentiment_or_mood?: string;
-  event_timestamp: string;
-  created_at: string;
-  calendar_action?: {
-    is_actionable: boolean;
-    title?: string;
-    start_time?: string;
-    end_time?: string;
-  } | null;
-  calendar_status?: string;
-  google_event_id?: string;
-};
-
-/**
- * Maps raw category or content into an authentic Life Texture
- */
-export function resolveLifeTexture(item: LedgerItem): {
-  key: "actionable_obligation" | "media_log" | "idea_spark" | "hard_truth" | "hard_work" | "perspective" | "quiet_moment";
-  label: string;
-  borderClass: string;
-  bgAccent: string;
-  textAccent: string;
-  icon: any;
-} {
-  const c = (item.category || "").toLowerCase();
-  const texture = (item.life_texture || "").toLowerCase();
-  const content = (item.content || "").toLowerCase();
-  const tags = (item.tags || []).map((t) => t.toLowerCase());
-  const isActionable = Boolean(item.calendar_action?.is_actionable);
-
-  // 1. TIME-FIRST EVALUATION: Actionable Obligations, Tasks, Reminders, and Scheduled Events
-  if (
-    isActionable ||
-    texture === "actionable_obligation" ||
-    c === "task" ||
-    c === "reminder" ||
-    c === "event" ||
-    content.includes("call today") ||
-    content.includes("call tomorrow") ||
-    content.includes("appointment") ||
-    content.includes("event on ") ||
-    content.includes("orientation on ")
-  ) {
-    const isEvent = c === "event" || content.includes("event") || content.includes("orientation");
-    const isReminder = c === "reminder" || content.includes("call") || content.includes("remind");
-    return {
-      key: "actionable_obligation",
-      label: isEvent ? "Scheduled Event" : isReminder ? "Call & Reminder" : "Actionable Task",
-      borderClass: "border-sky-300/80 dark:border-sky-500/35 hover:border-sky-400",
-      bgAccent: "bg-sky-500",
-      textAccent: "text-sky-900 dark:text-sky-100 bg-sky-100/90 dark:bg-sky-500/15 border-sky-300/60 dark:border-sky-500/35",
-      icon: Calendar,
-    };
-  }
-
-  // 2. Cost & Hard Truths (Trading losses, financial hits, bills, expenses, failures, tough days)
-  const isFinancialOrSetback =
-    texture === "hard_truth" ||
-    c === "hard_truth" ||
-    c.includes("truth") ||
-    c === "loss" ||
-    tags.includes("trading") ||
-    tags.includes("finance") ||
-    tags.includes("expense") ||
-    tags.includes("bills") ||
-    tags.includes("financial_loss") ||
-    tags.includes("setback") ||
-    content.includes("lost massively") ||
-    content.includes("loose it all") ||
-    content.includes("lost ") ||
-    content.includes("worst day") ||
-    content.includes("bought groceries") ||
-    content.includes("paid bill") ||
-    content.includes("pay the wifi bill") ||
-    content.includes("wifi bill") ||
-    content.includes("failed");
-
-  if (isFinancialOrSetback) {
-    return {
-      key: "hard_truth",
-      label: "Hard Truth & Cost",
-      borderClass: "border-amber-300/80 dark:border-amber-500/35 hover:border-amber-400",
-      bgAccent: "bg-amber-500",
-      textAccent: "text-amber-900 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-500/15 border-amber-300/60 dark:border-amber-500/35",
-      icon: TrendingDown,
-    };
-  }
-
-  // 3. Media Consumption (Music, cinema, anime, gaming, trailers, podcast)
-  const isMedia =
-    texture === "media_log" ||
-    c === "media_log" ||
-    c === "media" ||
-    tags.includes("music") ||
-    tags.includes("movies") ||
-    tags.includes("gaming") ||
-    tags.includes("song") ||
-    tags.includes("radio") ||
-    tags.includes("pop") ||
-    tags.includes("bollywood") ||
-    tags.includes("trailers") ||
-    tags.includes("watchlist") ||
-    content.includes("heard \"") ||
-    content.includes("listening to") ||
-    content.includes("movie trailer") ||
-    content.includes("play the airbase") ||
-    content.includes("walkthrough") ||
-    content.includes("watched ");
-
-  if (isMedia) {
-    return {
-      key: "media_log",
-      label: "Media & Intake",
-      borderClass: "border-indigo-400/60 hover:border-indigo-500",
-      bgAccent: "bg-indigo-600",
-      textAccent: "text-indigo-900 dark:text-indigo-100 bg-indigo-100/90 dark:bg-indigo-500/15 border-indigo-300/60 dark:border-indigo-500/35",
-      icon: Headphones,
-    };
-  }
-
-  // 4. Ideas, Wishlists & Desires (Timeless desires, things to buy/read/try, uncompleted goals)
-  const isIdeaOrWishlist =
-    texture === "idea_spark" ||
-    c === "idea_desire" ||
-    c === "idea" ||
-    c === "wishlist" ||
-    tags.includes("wishlist") ||
-    tags.includes("shopping") ||
-    content.startsWith("want to") ||
-    content.startsWith("wish i") ||
-    content.startsWith("idea for") ||
-    content.startsWith("thinking of") ||
-    content.startsWith("should add") ||
-    content.startsWith("need to buy") ||
-    content.startsWith("need to get") ||
-    content.startsWith("need to call") ||
-    content.startsWith("need to write") ||
-    content.startsWith("need to renew");
-
-  if (isIdeaOrWishlist) {
-    return {
-      key: "idea_spark",
-      label: "Idea & Wishlist",
-      borderClass: "border-violet-300/80 dark:border-violet-500/35 hover:border-violet-400",
-      bgAccent: "bg-violet-500",
-      textAccent: "text-violet-900 dark:text-violet-100 bg-violet-100/90 dark:bg-violet-500/15 border-violet-300/60 dark:border-violet-500/35",
-      icon: Sparkle,
-    };
-  }
-
-  // 5. Perspectives & Reflections (Books, wisdom, philosophy, lessons)
-  const isPerspective =
-    texture === "perspective" ||
-    c === "perspective" ||
-    c === "perspective_lesson" ||
-    c === "learning" ||
-    tags.includes("philosophy") ||
-    tags.includes("wisdom") ||
-    tags.includes("self-improvement") ||
-    content.includes("reading \"deep work\"");
-
-  if (isPerspective) {
-    return {
-      key: "perspective",
-      label: "Perspective & Insight",
-      borderClass: "border-rose-300/80 dark:border-rose-500/35 hover:border-rose-400",
-      bgAccent: "bg-rose-500",
-      textAccent: "text-rose-900 dark:text-rose-100 bg-rose-100/90 dark:bg-rose-500/15 border-rose-300/60 dark:border-rose-500/35",
-      icon: BookOpen,
-    };
-  }
-
-  // 6. Hard Work & Real Milestones (ONLY genuine completed past achievements)
-  const isCompletedMilestone =
-    texture === "hard_work" ||
-    c === "milestone_hardwork" ||
-    c === "hard_work" ||
-    c === "milestone" ||
-    (c === "done" && (
-      content.includes("finished") ||
-      content.includes("wrapped up") ||
-      content.includes("cleared") ||
-      content.includes("submitted") ||
-      content.includes("shipped") ||
-      content.includes("completed")
-    ));
-
-  if (isCompletedMilestone) {
-    return {
-      key: "hard_work",
-      label: "Milestone & Achievement",
-      borderClass: "border-emerald-300/80 dark:border-emerald-500/35 hover:border-emerald-400",
-      bgAccent: "bg-emerald-500",
-      textAccent: "text-emerald-900 dark:text-emerald-100 bg-emerald-100/90 dark:bg-emerald-500/15 border-emerald-300/60 dark:border-emerald-500/35",
-      icon: CheckCircle2,
-    };
-  }
-
-  // 7. Quiet Moments (Default fallback for reflections, poems, micro-moments)
-  return {
-    key: "quiet_moment",
-    label: "Quiet Moment",
-    borderClass: "border-purple-300/80 dark:border-purple-500/35 hover:border-purple-400",
-    bgAccent: "bg-purple-500",
-    textAccent: "text-purple-900 dark:text-purple-100 bg-purple-100/90 dark:bg-purple-500/15 border-purple-300/60 dark:border-purple-500/35",
-    icon: Coffee,
-  };
-}
+import { type LedgerItem } from "@/lib/ledger";
+import { resolveLifeTexture } from "@/lib/ledger-presentation";
 
 /**
  * Calculates human-friendly relative time
@@ -324,7 +112,10 @@ export default function LifeLedgerPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       }),
     });
-    if (!res.ok) throw new Error("Failed to save moment");
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to save moment");
+    }
     await res.json();
     await loadLedgerData();
   };
@@ -354,6 +145,9 @@ export default function LifeLedgerPage() {
       quiet_moment: 0,
       hard_truth: 0,
       perspective: 0,
+      shaairi_quote: 0,
+      daily_log: 0,
+      unclassified: 0,
     };
     items.forEach((i) => {
       const t = resolveLifeTexture(i).key;
@@ -550,6 +344,13 @@ export default function LifeLedgerPage() {
               🧠 Perspectives ({countByTexture.perspective})
             </button>
           )}
+
+          {(["shaairi_quote", "daily_log", "unclassified"] as const).map((key) => countByTexture[key] > 0 && (
+            <button key={key} onClick={() => setActiveTextureFilter(activeTextureFilter === key ? null : key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border border-border ${activeTextureFilter === key ? "bg-accent/10 text-accent" : "bg-surface text-muted"}`}>
+              {{ shaairi_quote: "Shaairi & Quotes", daily_log: "Daily Life", unclassified: "Unclassified" }[key]} ({countByTexture[key]})
+            </button>
+          ))}
 
           <Link
             href="/digest"
@@ -777,6 +578,19 @@ export default function LifeLedgerPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+                );
+              }
+
+              if (texture.key !== "hard_work") {
+                const Icon = texture.icon;
+                return (
+                  <div key={item.id} className={`p-6 rounded-2xl bg-surface border ${texture.borderClass}`}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${texture.textAccent}`}><Icon size={12} />{texture.label}</span>
+                      <span className="text-xs text-muted">{getRelativeTimeLabel(item.event_timestamp || item.created_at)}</span>
+                    </div>
+                    <p className="entry-copy text-foreground">{item.content}</p>
                   </div>
                 );
               }

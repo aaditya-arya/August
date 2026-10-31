@@ -4,17 +4,13 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { Sparkles, Loader2, Network, RefreshCw, Layers, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
+import { CATEGORY_DEFINITIONS } from "@/lib/ledger";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Done: "#10b981", // Emerald
-  Idea: "#f59e0b", // Amber
-  Wishlist: "#ec4899", // Pink
-  Media: "#3b82f6", // Blue
-  Shaairi_Quote: "#8b5cf6", // Purple
-  Learning: "#06b6d4", // Cyan
-};
+const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_DEFINITIONS).map(([key, value]) => [key, value.color])
+);
 
 type Node = {
   id: string;

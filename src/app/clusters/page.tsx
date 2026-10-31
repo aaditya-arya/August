@@ -1,28 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Folders, Search, ArrowRight, Loader2, Sparkles, X, Calendar } from "lucide-react";
+import { Folders, Search, ArrowRight, Loader2, X, Calendar } from "lucide-react";
 import { format } from "date-fns";
-import Link from "next/link";
+import { CATEGORIES, getClassification, normalizeStoredItem, type LedgerItem } from "@/lib/ledger";
 import { generateGoogleCalendarUrl } from "@/lib/calendar";
 
-type Item = {
-  id: string;
-  category: string;
-  content: string;
-  tags?: string[];
-  sentiment_or_mood?: string;
-  event_timestamp?: string;
-  calendar_action?: {
-    is_actionable: boolean;
-    title?: string;
-    start_time?: string;
-    end_time?: string;
-  } | null;
-  calendar_status?: string;
-  google_event_id?: string;
-  created_at: string;
-};
+type Item = LedgerItem;
 
 export default function ClustersPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -37,7 +21,7 @@ export default function ClustersPage() {
         const res = await fetch("/api/items");
         if (res.ok) {
           const data = await res.json();
-          setItems(data.items || []);
+          setItems((data.items || []).map((item: Item) => normalizeStoredItem(item)));
         }
       } catch (err) {
         console.error("Failed to load items:", err);
@@ -48,41 +32,13 @@ export default function ClustersPage() {
     loadItems();
   }, []);
 
-  const wishlistCount = items.filter((i) => i.category === "Wishlist").length;
-  const shaairiCount = items.filter((i) => i.category === "Shaairi_Quote").length;
-  const mediaCount = items.filter((i) => i.category === "Media").length;
-  const ideaCount = items.filter((i) => i.category === "Idea").length;
-
-  const clusterCards = [
-    {
-      id: "Wishlist",
-      name: "Wishlist",
-      count: wishlistCount,
-      color: "bg-pink-50/80 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20 text-pink-900 dark:text-pink-100 hover:border-pink-300 dark:hover:border-pink-500/35",
-      badge: "bg-pink-100 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300",
-    },
-    {
-      id: "Shaairi_Quote",
-      name: "Shaairi & Quotes",
-      count: shaairiCount,
-      color: "bg-purple-50/80 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20 text-purple-900 dark:text-purple-100 hover:border-purple-300 dark:hover:border-purple-500/35",
-      badge: "bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300",
-    },
-    {
-      id: "Media",
-      name: "Jukebox (Media)",
-      count: mediaCount,
-      color: "bg-blue-50/80 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-900 dark:text-blue-100 hover:border-blue-300 dark:hover:border-blue-500/35",
-      badge: "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300",
-    },
-    {
-      id: "Idea",
-      name: "Money & Ideas",
-      count: ideaCount,
-      color: "bg-amber-50/80 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20 text-amber-900 dark:text-amber-100 hover:border-amber-300 dark:hover:border-amber-500/35",
-      badge: "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300",
-    },
-  ];
+  const clusterCards = [...CATEGORIES, ...(items.some((item) => item.category === "Unclassified") ? ["Unclassified"] : [])].map((category) => ({
+    id: category,
+    name: getClassification({ category }).label,
+    count: items.filter((item) => item.category === category).length,
+    color: "bg-surface border-border text-foreground hover:border-accent/40",
+    badge: "bg-accent/10 text-accent",
+  }));
 
   // Filter items based on active search or active cluster selection
   const filteredItems = items.filter((item) => {
@@ -91,7 +47,8 @@ export default function ClustersPage() {
     const matchesSearch = query
       ? item.content.toLowerCase().includes(query) ||
         item.tags?.some((t) => t.toLowerCase().includes(query)) ||
-        item.category.toLowerCase().includes(query)
+        item.category.toLowerCase().includes(query) ||
+        getClassification(item).label.toLowerCase().includes(query)
       : true;
     return matchesCategory && matchesSearch;
   });
@@ -214,7 +171,7 @@ export default function ClustersPage() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-500/10 px-2.5 py-0.5 rounded-full border border-pink-200/60 dark:border-pink-500/20">
-                        {item.category}
+                        {getClassification(item).label}
                       </span>
                       <span className="text-xs text-zinc-500 dark:text-muted font-medium">
                         {format(new Date(item.event_timestamp || item.created_at), "MMM d, yyyy • h:mm a")}
@@ -239,7 +196,7 @@ export default function ClustersPage() {
                       <div className="mt-3 pt-3 border-t border-pink-100 dark:border-pink-500/20 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-semibold">
                           <Calendar size={14} className="text-pink-500 shrink-0" />
-                          <span>Event: {item.calendar_action.title || "Scheduled Task"}</span>
+                          <span>{item.category}: {item.calendar_action.title || "Scheduled item"}</span>
                         </div>
                         <a
                           href={generateGoogleCalendarUrl(item.calendar_action, item.content)}

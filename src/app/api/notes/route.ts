@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { content, currentTime, timezone } = body;
 
-    if (!content) {
+    if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 });
     }
 
@@ -68,6 +68,7 @@ export async function POST(request: Request) {
 
       if (extractError) {
         console.error("Supabase extracted_items insertion error:", extractError);
+        return NextResponse.json({ error: "Your raw note was saved, but its classified items could not be saved. Please retry." }, { status: 500 });
       } else {
         insertedNodes = insertedData || [];
       }

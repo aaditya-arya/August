@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizeStoredItem } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(request: Request) {
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ items: data || [] });
+    return NextResponse.json({ items: (data || []).map(normalizeStoredItem) });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 });
   }

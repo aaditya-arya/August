@@ -12,7 +12,7 @@ create table if not exists notes (
 create table if not exists extracted_items (
   id uuid primary key default gen_random_uuid(),
   note_id uuid references notes(id) on delete cascade not null,
-  category text not null, -- 'Done', 'Idea', 'Wishlist', 'Media', 'Shaairi_Quote', 'Learning'
+  category text not null, -- Canonical categories in src/lib/ledger.ts. life_texture is derived in the app, not a database column.
   content text not null,
   tags text[] default '{}',
   sentiment_or_mood text,
