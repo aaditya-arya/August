@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { ArrowUpRight, Check } from "lucide-react";
 
-export function ReviewReflection({ question, onSaved }: { question: string; onSaved: () => void }) {
+export function ReviewReflection({ question }: { question: string }) {
   const [answer, setAnswer] = useState(""), [saving, setSaving] = useState(false), [saved, setSaved] = useState(false), [error, setError] = useState<string | null>(null);
   const pending = useRef<{ content: string; key: string } | null>(null);
   async function save(event: React.FormEvent) {
@@ -15,7 +15,7 @@ export function ReviewReflection({ question, onSaved }: { question: string; onSa
       const response = await fetch("/api/notes", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": pending.current.key }, body: JSON.stringify({ content, currentTime: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save your reflection.");
-      setSaved(true); setAnswer(""); pending.current = null; window.dispatchEvent(new Event("august-ledger-changed")); onSaved();
+      setSaved(true); setAnswer(""); pending.current = null; window.dispatchEvent(new Event("august-ledger-changed"));
     } catch (error) { setError(error instanceof Error ? error.message : "Could not save your reflection."); }
     finally { setSaving(false); }
   }

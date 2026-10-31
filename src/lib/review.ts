@@ -3,12 +3,14 @@ import { intentionState, localDay, validDay, type IntentionState } from "./inten
 
 export type ReviewInsight = { title: string; meaning: string; takeaway: string; source_ids: string[] };
 export type ReviewIntention = {
+  needs_confirmation?: boolean;
   anchor_id: string; title: string; kind: "wish" | "goal" | "task";
   status: "open" | "progress" | "completed" | "released" | "paused";
   reflection: string; gap: string; next_step: string; source_ids: string[];
   deadline: string | null; last_movement_at: string; state: IntentionState | null;
 };
 export type SundayReview = {
+  focus: ReviewInsight | null;
   opening: string;
   progress: ReviewInsight[];
   experiences: ReviewInsight[];
@@ -24,6 +26,7 @@ export type ReviewResponse = {
   intentions: ReviewIntention[]; entries: LedgerItem[]; selected_count: number;
   context_count: number; generated_at: string; message?: string;
 };
+export type ReviewSourceNote = { id: string; content: string };
 
 export function reviewPeriod(days: ReviewPeriod["days"], now: Date): ReviewPeriod {
   return { days, start: days === "all" ? null : new Date(now.getTime() - Number(days) * 86400000).toISOString(), end: now.toISOString(), label: days === "all" ? "Across your ledger" : days === "7" ? "The last seven days" : "The last thirty days" };
@@ -49,6 +52,20 @@ function object(value: unknown): Record<string, unknown> {
 function sources(value: unknown, entries: Map<string, LedgerItem>): string[] {
   if (!Array.isArray(value) || !value.length || value.length > 12 || value.some((id) => typeof id !== "string" || !entries.has(id))) throw new Error("Review referred to missing source entries.");
   return [...new Set(value as string[])];
+}
+
+export function parseReviewFocus(value: unknown, allEntries: LedgerItem[], period: ReviewPeriod): { focus: ReviewInsight; question: string } | null {
+  const raw = object(value);
+  if (raw.focus === null) return null;
+  const entries = new Map(allEntries.map(entry => [entry.id, entry]));
+  const row = object(raw.focus), ids = sources(row.source_ids, entries);
+  for (const key of ["before", "after"]) {
+    const evidence = object(raw[key]);
+    const id = text(evidence.source_id, 100), quote = text(evidence.quote, 600);
+    if (!ids.includes(id) || !entries.get(id)?.content.includes(quote)) throw new Error("The main reflection changed its quoted evidence.");
+  }
+  if (!ids.some(id => inReviewPeriod(entries.get(id)!, period))) throw new Error("The main reflection is outside the selected period.");
+  return { focus: { title: text(row.title, 120), meaning: text(row.meaning, 900), takeaway: text(row.takeaway, 700), source_ids: ids }, question: text(raw.question, 400) };
 }
 
 export function parseSundayReview(value: unknown, allEntries: LedgerItem[], period: ReviewPeriod, timezone: string): SundayReview {
@@ -79,7 +96,7 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
     const ids = sources(row.source_ids, entries);
     if (!ids.includes(anchor)) throw new Error("Intention must reference its original entry.");
     const state = intentionState(entries.get(anchor)!);
-    const supporting = ids.filter((id) => id !== anchor && Date.parse(entries.get(id)!.created_at) >= Date.parse(entries.get(anchor)!.created_at) && Date.parse(entries.get(id)!.event_timestamp) <= Date.parse(period.end));
+    const supporting = ids.filter((id) => id !== anchor && Date.parse(entries.get(id)!.event_timestamp) >= Date.parse(entries.get(anchor)!.event_timestamp) && Date.parse(entries.get(id)!.event_timestamp) <= Date.parse(period.end));
     let status = row.status as ReviewIntention["status"];
     if (["completed", "progress", "released"].includes(status) && !supporting.length) status = "open";
     if (state) status = state.status === "active" ? (status === "completed" || status === "progress" ? status : "open") : state.status;
@@ -93,7 +110,7 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
       if (grounded) deadline = row.deadline;
     }
     if (state) deadline = state.target_date;
-    const movement = supporting.map((id) => entries.get(id)!.event_timestamp).sort().slice(-1)[0] || entries.get(anchor)!.created_at;
+    const movement = supporting.map((id) => entries.get(id)!.event_timestamp).sort().slice(-1)[0] || entries.get(anchor)!.event_timestamp;
     const uncommittedWish = !state && !supporting.length && canonicalCategory(entries.get(anchor)!.category) === "Wishlist";
     return { anchor_id: anchor, title: state?.title || text(row.title, 140), kind: state ? "goal" : uncommittedWish ? "wish" : row.kind as ReviewIntention["kind"], status,
       reflection: text(row.reflection, 700), gap: !state && !supporting.length ? "No linked follow-through is recorded yet. You can keep this, plan it, or decide it no longer matters." : text(row.gap, 400),
@@ -103,7 +120,7 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
   const proposedNext = raw.next_step === null ? null : insight(raw.next_step);
   const next = proposedNext?.source_ids.some((id) => {
     const source = entries.get(id)!;
-    return ["Wishlist", "Task", "Reminder", "Event"].includes(canonicalCategory(source.category) || "") || intentionState(source)?.status === "active";
+    return intentionState(source)?.status === "active" || (["Wishlist", "Task", "Reminder", "Event"].includes(canonicalCategory(source.category) || "") && Date.parse(source.event_timestamp) >= Date.parse(period.end) - 30 * 86400000);
   }) ? proposedNext : null;
   const experiences = section("experiences").filter((item) => item.source_ids.some((id) => {
     const source = entries.get(id)!;
@@ -112,24 +129,27 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
   const validIntentions = intentions.filter((item) => item.state || canonicalCategory(entries.get(item.anchor_id)!.category) !== "Idea" || item.source_ids.length > 1);
   const recordedCompletions = allEntries.filter((item) => selected.has(item.id) && (canonicalCategory(item.category) === "Milestone_HardWork" || intentionState(item)?.status === "completed"));
   if (recordedCompletions.length && !progress.some((item) => item.source_ids.some((id) => recordedCompletions.some((source) => source.id === id)))) throw new Error("The review omitted the completed work recorded in this period.");
-  return { opening: text(raw.opening, 600), progress, experiences, lessons: section("lessons"), patterns: section("patterns").filter((item) => item.source_ids.length > 1), intentions: validIntentions,
+  const focus = raw.focus ? insight(raw.focus) : null;
+  if (focus && !focus.source_ids.some((id) => selected.has(id))) throw new Error("The main reflection is outside the selected period.");
+  return { opening: text(raw.opening, 600), focus, progress, experiences, lessons: section("lessons"), patterns: section("patterns").filter((item) => new Set(item.source_ids.map(id => localDay(new Date(entries.get(id)!.event_timestamp), timezone))).size > 1), intentions: validIntentions,
     next_step: next, question: text(raw.question, 400) };
 }
 
 /** Honest fallback/carry-forward candidates; absence of a log is never asserted as failure. */
 export function directIntentions(entries: LedgerItem[]): ReviewIntention[] {
-  return entries.filter((item) => intentionState(item) || canonicalCategory(item.category) === "Wishlist").map((item) => {
+  return entries.filter((item) => intentionState(item) || ["Wishlist", "Task", "Reminder"].includes(canonicalCategory(item.category) || "")).map((item) => {
     const state = intentionState(item);
-    return { anchor_id: item.id, title: state?.title || item.content, kind: state ? "goal" as const : "wish" as const,
+    const task = ["Task", "Reminder"].includes(canonicalCategory(item.category) || "");
+    return { anchor_id: item.id, title: state?.title || item.memory?.title || item.content, kind: state ? "goal" as const : task ? "task" as const : "wish" as const,
       status: state ? state.status === "active" ? "open" as const : state.status : "open" as const,
-      reflection: state ? "A plan you chose to keep in view." : "You mentioned wanting this. Is it still something you want to make room for?",
-      gap: state ? state.next_step ? "Your next step is saved below." : "Choose one next step." : "There is no plan saved for this wish yet.",
+      reflection: state ? "A plan you chose to keep in view." : task ? "You mentioned this action. Is it still relevant?" : "You mentioned wanting this. Is it still something you want to make room for?",
+      gap: state ? state.next_step ? "Your next step is saved below." : "Choose one next step." : task ? "Its current outcome is not recorded." : "There is no plan saved for this wish yet.",
       next_step: state?.next_step || "Decide whether to give this a date, keep it as a wish, or let it go.",
-      source_ids: [item.id], deadline: state?.target_date || null, last_movement_at: state?.updated_at || item.created_at, state };
+      source_ids: [item.id], deadline: state?.target_date || null, last_movement_at: state?.updated_at || item.event_timestamp, state };
   });
 }
 
-export function mergeIntentions(entries: LedgerItem[], inferred: ReviewIntention[]): ReviewIntention[] {
+export function mergeIntentions(entries: LedgerItem[], inferred: ReviewIntention[], now = new Date()): ReviewIntention[] {
   const ids = new Set(entries.map((entry) => entry.id));
   const byAnchor = new Map(inferred.filter((item) => ids.has(item.anchor_id) && item.source_ids.every((id) => ids.has(id))).map((item) => [item.anchor_id, item]));
   const covered = new Set([...byAnchor.values()].flatMap((item) => item.source_ids));
@@ -140,5 +160,5 @@ export function mergeIntentions(entries: LedgerItem[], inferred: ReviewIntention
       status: item.state?.status === "active" && previous?.status === "completed" && previous.last_movement_at >= item.state.updated_at ? "completed" : item.status,
       reflection: previous?.reflection || item.reflection, gap: item.state ? item.gap : previous?.gap || item.gap });
   }
-  return [...byAnchor.values()].sort((a, b) => Number(Boolean(b.state)) - Number(Boolean(a.state)) || (a.deadline || "9999").localeCompare(b.deadline || "9999") || b.last_movement_at.localeCompare(a.last_movement_at));
+  return [...byAnchor.values()].map((item) => ({ ...item, needs_confirmation: !item.state && item.status !== "completed" && Date.parse(item.last_movement_at) < now.getTime() - 30 * 86400000 })).sort((a, b) => Number(Boolean(b.state)) - Number(Boolean(a.state)) || (a.deadline || "9999").localeCompare(b.deadline || "9999") || b.last_movement_at.localeCompare(a.last_movement_at));
 }

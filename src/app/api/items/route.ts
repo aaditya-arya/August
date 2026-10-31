@@ -1,6 +1,6 @@
 import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
-import { normalizeStoredItem, categoryStorageValues } from "@/lib/ledger";
+import { normalizeStoredItem, categoryStorageValues, type LedgerItem } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(request: Request) {
@@ -12,8 +12,8 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("extracted_items")
-      .select("*")
-      .order("event_timestamp", { ascending: false });
+      .select("id, note_id, category, content, tags, sentiment_or_mood, event_timestamp, created_at, calendar_action, calendar_status, google_event_id")
+      .order("event_timestamp", { ascending: false }).order("id");
 
     if (category) {
       query = query.in("category", categoryStorageValues(category));
@@ -29,13 +29,14 @@ export async function GET(request: Request) {
       query = query.gte("event_timestamp", cutoff.toISOString());
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const items: LedgerItem[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await query.range(offset, offset + 499);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      items.push(...(data || []).map(entry => normalizeStoredItem(entry) as LedgerItem));
+      if (!data || data.length < 500) break;
     }
-
-    return NextResponse.json({ items: (data || []).map(normalizeStoredItem) });
+    return NextResponse.json({ items });
   } catch (error) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }

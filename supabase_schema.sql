@@ -19,7 +19,7 @@ create table if not exists extracted_items (
   event_timestamp timestamp with time zone default timezone('utc'::text, now()) not null,
   google_event_id text default null,
   calendar_status text default 'none', -- 'none', 'pending', 'synced', 'failed'
-  calendar_action jsonb default null, -- Scheduling fields plus optional versioned review_state for user-authored plans; review_state never activates Calendar.
+  calendar_action jsonb default null, -- Scheduling fields plus independent review_state plans and memory source offsets; metadata never activates Calendar.
   embedding vector(768), -- Gemini text-embedding-004 produces 768-dimensional vectors
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

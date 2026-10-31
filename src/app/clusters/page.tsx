@@ -1,220 +1,29 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { Folders, Search, ArrowRight, Loader2, X, Calendar } from "lucide-react";
-import { format } from "date-fns";
+﻿"use client";
+import { useEffect, useState } from "react";
+import { Search, Loader2, X } from "lucide-react";
 import { groupByCategory, getClassification, normalizeStoredItem, type LedgerItem } from "@/lib/ledger";
-import { generateGoogleCalendarUrl, shouldOfferCalendarAdd } from "@/lib/calendar";
-
-type Item = LedgerItem;
+import { MemoryCard } from "@/components/MemoryCard";
 
 export default function ClustersPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
+  const [items, setItems] = useState<LedgerItem[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [query, setQuery] = useState(""), [category, setCategory] = useState<string | null>(null), [revision, setRevision] = useState(0);
   useEffect(() => {
-    async function loadItems() {
-      try {
-        setLoading(true);
-        const res = await fetch("/api/items");
-        if (res.ok) {
-          const data = await res.json();
-          setItems((data.items || []).map((item: Item) => normalizeStoredItem(item)));
-        }
-      } catch (err) {
-        console.error("Failed to load items:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadItems();
-  }, []);
-
-  const clusterCards = groupByCategory(items).map((group) => ({
-    id: group.category, name: group.label, count: group.items.length,
-    color: "bg-surface border-border text-foreground hover:border-accent/40",
-    badge: "bg-accent/10 text-accent",
-  }));
-
-  // Filter items based on active search or active cluster selection
-  const filteredItems = items.filter((item) => {
-    const matchesCategory = selectedCategory ? item.category === selectedCategory : true;
-    const query = searchQuery.toLowerCase().trim();
-    const matchesSearch = query
-      ? item.content.toLowerCase().includes(query) ||
-        item.tags?.some((t) => t.toLowerCase().includes(query)) ||
-        item.category.toLowerCase().includes(query) ||
-        getClassification(item).label.toLowerCase().includes(query)
-      : true;
-    return matchesCategory && matchesSearch;
-  });
-
-  return (
-    <div className="max-w-4xl mx-auto px-5 py-9 sm:p-8 md:pt-16">
-      <header className="mb-10">
-        <h1 className="text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 mb-2 flex items-center gap-3 tracking-tight">
-          Clusters & Retrieval <Folders className="text-pink-500" size={28} />
-        </h1>
-        <p className="text-zinc-600 dark:text-muted text-base">
-          Browse by category or search through all extracted memories, items, and ideas.
-        </p>
-      </header>
-
-      {/* Search Bar */}
-      <div className="mb-12">
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-pink-400 via-rose-300 to-pink-300 rounded-2xl blur-md opacity-30 group-hover:opacity-50 transition duration-500"></div>
-          <div className="relative flex items-center bg-white dark:bg-surface border border-pink-200 dark:border-pink-500/20 rounded-2xl overflow-hidden shadow-[0_8px_24px_rgba(244,114,182,0.1)] focus-within:border-pink-400 focus-within:ring-4 focus-within:ring-pink-100/60 dark:focus-within:ring-pink-500/20 transition-all px-5 py-2">
-            <Search className="text-pink-500 mr-3 shrink-0" size={20} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder='Search by keyword, tag (e.g. "music", "shoes"), or concept...'
-              className="w-full bg-transparent text-zinc-900 dark:text-zinc-100 font-medium py-3 focus:outline-none text-base placeholder:text-muted"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="text-muted hover:text-zinc-600 dark:hover:text-muted p-1"
-              >
-                <X size={18} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="py-20 flex justify-center items-center">
-          <Loader2 className="animate-spin text-pink-500" size={32} />
-        </div>
-      ) : (
-        <>
-          {/* Clusters Grid */}
-          <div className="mb-12">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Your Categories</h2>
-              {selectedCategory && (
-                <button
-                  onClick={() => setSelectedCategory(null)}
-                  className="text-xs font-semibold text-pink-600 dark:text-pink-400 hover:text-pink-700 dark:hover:text-pink-300 underline"
-                >
-                  Clear filter
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {clusterCards.map((cluster) => {
-                const isSelected = selectedCategory === cluster.id;
-                return (
-                  <div
-                    key={cluster.id}
-                    onClick={() =>
-                      setSelectedCategory(isSelected ? null : cluster.id)
-                    }
-                    className={`p-6 rounded-2xl border transition-all cursor-pointer shadow-xs ${cluster.color} ${
-                      isSelected
-                        ? "ring-2 ring-pink-500 shadow-md scale-[1.01]"
-                        : "hover:shadow-md hover:-translate-y-0.5"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{cluster.name}</h3>
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${cluster.badge}`}>
-                        {cluster.count} items
-                      </span>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-muted">
-                      <span>{isSelected ? "Showing filtered" : "Click to view items"}</span>
-                      <ArrowRight size={16} className={isSelected ? "text-pink-600 dark:text-pink-400" : ""} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Results List */}
-          <div>
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
-              {selectedCategory
-                ? `Items in ${clusterCards.find((c) => c.id === selectedCategory)?.name}`
-                : searchQuery
-                ? `Search Results`
-                : `All Extracted Items`}{" "}
-              <span className="text-xs font-semibold text-pink-600 dark:text-pink-400 bg-pink-100 dark:bg-pink-500/15 px-2.5 py-0.5 rounded-full">
-                {filteredItems.length}
-              </span>
-            </h2>
-
-            <div className="space-y-3">
-              {filteredItems.length === 0 ? (
-                <div className="text-center py-12 border-2 border-dashed border-pink-200 dark:border-pink-500/20 rounded-2xl bg-white/50 dark:bg-surface/50 p-6">
-                  <p className="text-zinc-600 dark:text-muted font-semibold mb-1">No items found.</p>
-                  <p className="text-muted text-xs">
-                    {items.length === 0
-                      ? "Your collection begins with a thought. Write your first moment in the Life Ledger."
-                      : "Try clearing your search query or selecting a different category."}
-                  </p>
-                </div>
-              ) : (
-                filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white dark:bg-surface border border-pink-100/90 dark:border-pink-500/20 p-5 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_16px_rgba(244,114,182,0.1)] transition-all flex flex-col gap-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-500/10 px-2.5 py-0.5 rounded-full border border-pink-200/60 dark:border-pink-500/20">
-                        {getClassification(item).label}
-                      </span>
-                      <span className="text-xs text-zinc-500 dark:text-muted font-medium">
-                        {format(new Date(item.event_timestamp || item.created_at), "MMM d, yyyy • h:mm a")}
-                      </span>
-                    </div>
-                    <p className="entry-copy text-foreground">
-                      {item.content}
-                    </p>
-                    {item.tags && item.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {item.tags.map((t) => (
-                          <span
-                            key={t}
-                            className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium px-2 py-0.5 rounded-md"
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {item.calendar_action && item.calendar_action.is_actionable && (
-                      <div className="mt-3 pt-3 border-t border-pink-100 dark:border-pink-500/20 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-semibold">
-                          <Calendar size={14} className="text-pink-500 shrink-0" />
-                          <span>{item.category}: {item.calendar_action.title || "Scheduled item"}</span>
-                        </div>
-                        {item.calendar_status === "synced" && <span className="text-xs text-muted">Synced to Google Calendar</span>}
-                        {shouldOfferCalendarAdd(item) && <a
-                          href={generateGoogleCalendarUrl(item.calendar_action, item.content)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm transition-all"
-                        >
-                          <Calendar size={13} />
-                          Add to Google Calendar
-                        </a>}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+    let live = true;
+    fetch("/api/items").then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load your memories.");
+      if (live) { setItems((data.items || []).map((item: LedgerItem) => normalizeStoredItem(item))); setError(""); }
+    }).catch(failure => { if (live) setError(failure.message); }).finally(() => { if (live) setLoading(false); });
+    const changed = () => setRevision(value => value + 1);
+    window.addEventListener("august-ledger-changed", changed);
+    return () => { live = false; window.removeEventListener("august-ledger-changed", changed); };
+  }, [revision]);
+  const groups = groupByCategory(items), search = query.toLocaleLowerCase().trim();
+  const filtered = items.filter(item => (!category || item.category === category) && (!search || [item.content, item.memory?.title, getClassification(item).label, ...(item.tags || [])].some(value => value?.toLocaleLowerCase().includes(search))));
+  return <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8 lg:px-12">
+    <header className="mb-8"><p className="text-[10px] uppercase tracking-[.2em] text-accent">Clusters & Retrieval</p><h1 className="mt-3 font-serif text-4xl tracking-[-.04em]">Find your way back.</h1><p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">Different parts of your life, with the story around them still intact.</p></header>
+    <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface px-4"><Search size={17} className="shrink-0 text-muted" /><input aria-label="Search memories" placeholder="A person, a phrase, a moment..." value={query} onChange={event => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-4 text-sm outline-none" />{query && <button onClick={() => setQuery("")} aria-label="Clear search"><X size={15} /></button>}</div>
+    <nav aria-label="Memory categories" className="mb-8 flex flex-wrap gap-2"><button onClick={() => setCategory(null)} aria-pressed={!category} className={`rounded-full border px-3 py-2 text-xs ${!category ? "border-accent/30 bg-accent/10 text-accent" : "border-border text-muted"}`}>All <span className="ml-1 opacity-60">{items.length}</span></button>{groups.map(group => <button key={group.category} onClick={() => setCategory(category === group.category ? null : group.category)} aria-pressed={category === group.category} className={`rounded-full border px-3 py-2 text-xs ${category === group.category ? "border-accent/30 bg-accent/10 text-accent" : "border-border text-muted"}`}>{group.label}<span className="ml-2 opacity-60">{group.items.length}</span></button>)}</nav>
+    {loading ? <p role="status" className="flex items-center gap-2 py-12 text-sm text-muted"><Loader2 size={17} className="animate-spin" />Opening your memories...</p> : error ? <div role="alert"><p>{error}</p><button onClick={() => setRevision(value => value + 1)} className="mt-3 text-sm text-accent">Try again</button></div> : filtered.length ? <div className="grid items-start gap-4 md:grid-cols-2">{filtered.map(item => <MemoryCard key={item.id} item={item} />)}</div> : <p className="rounded-2xl border border-dashed border-border p-8 text-sm text-muted">{items.length ? "No matches. Try another phrase or category." : "Your collection starts with something you write."}</p>}
+  </div>;
 }

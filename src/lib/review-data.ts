@@ -12,7 +12,7 @@ export async function readReviewEntries(force = false): Promise<LedgerItem[]> {
     const entries: LedgerItem[] = [];
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from("extracted_items")
-        .select("id, category, content, tags, sentiment_or_mood, event_timestamp, created_at, calendar_action, calendar_status, google_event_id")
+        .select("id, note_id, category, content, tags, sentiment_or_mood, event_timestamp, created_at, calendar_action, calendar_status, google_event_id")
         .order("created_at", { ascending: false }).order("id").range(offset, offset + 499);
       if (error) throw error;
       entries.push(...data.map((entry) => normalizeStoredItem(entry) as LedgerItem));
@@ -22,4 +22,12 @@ export async function readReviewEntries(force = false): Promise<LedgerItem[]> {
     return entries;
   })();
   try { return await pending; } finally { pending = null; }
+}
+
+export async function readReviewSources(entries: LedgerItem[]) {
+  const ids = [...new Set(entries.map((entry) => entry.note_id).filter((id): id is string => Boolean(id)))].slice(0, 100);
+  if (!ids.length) return [];
+  const { data, error } = await supabase.from("notes").select("id, content").in("id", ids);
+  if (error) throw error;
+  return data;
 }

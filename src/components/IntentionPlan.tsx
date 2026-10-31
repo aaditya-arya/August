@@ -49,7 +49,7 @@ export function IntentionCard({ intention, compact = false }: { intention: Revie
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timing = deadlineLabel(intention.deadline, new Date(clock), timezone);
   const funding = intention.state ? moneyProgress(intention.state) : null;
-  const complete = intention.status === "completed", closed = complete || intention.status === "released" || intention.status === "paused";
+  const complete = intention.status === "completed", closed = complete || intention.status === "released" || intention.status === "paused" || intention.needs_confirmation;
   const Icon = complete ? CheckCircle2 : intention.status === "released" ? Leaf : intention.status === "paused" ? Pause : CalendarClock;
   return <>
     <article className={`rounded-2xl border p-5 ${complete ? "border-emerald-500/25 bg-emerald-500/5" : "border-border bg-surface"}`}>

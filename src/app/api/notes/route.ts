@@ -20,7 +20,14 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const id = new URL(request.url).searchParams.get("id");
+  if (id) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "A valid note is required." }, { status: 400 });
+    const { data, error } = await supabase.from("notes").select("id, content, created_at").eq("id", id).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return data ? NextResponse.json({ note: data }) : NextResponse.json({ error: "This note no longer exists." }, { status: 404 });
+  }
   const { data, error } = await supabase.from("notes").select("*").order("created_at", { ascending: false });
   return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ notes: data || [] });
 }

@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSundayReview, reviewPeriod, inReviewPeriod, directIntentions, mergeIntentions } = require('../.test-build/review.js');
+const { parseSundayReview, parseReviewFocus, reviewPeriod, inReviewPeriod, directIntentions, mergeIntentions } = require('../.test-build/review.js');
 const { parseIntentionState, moneyProgress, deadlineLabel, yearHorizon, validDay } = require('../.test-build/intention-state.js');
 const { normalizeStoredItem, parseExtraction } = require('../.test-build/ledger.js');
 
@@ -38,7 +38,7 @@ test('a future task, a wish, or an old achievement cannot be passed off as this 
 test('experiences remain lived experiences and a single entry cannot masquerade as a recurring pattern', () => {
   const parsed = parseSundayReview(report({ experiences: [insight(['other-wish']), insight(['song'])], patterns: [insight(['work']), insight(['work', 'song'])] }), entries, period, 'UTC');
   assert.equal(parsed.experiences.length, 1); assert.equal(parsed.experiences[0].source_ids[0], 'song');
-  assert.equal(parsed.patterns.length, 1);
+  assert.equal(parsed.patterns.length, 0, 'Several fragments from one day are not a recurring pattern.');
 });
 
 test('fabricated sources and duplicate intention anchors are rejected', () => {
@@ -50,6 +50,27 @@ test('a review cannot silently erase real completed work by returning only open 
   assert.throws(() => parseSundayReview(report({ progress: [] }), entries, period, 'UTC'), /omitted the completed work/);
   const allTime = parseSundayReview(report({ progress: [insight(['old-work'])] }), entries, reviewPeriod('all', now), 'UTC');
   assert.deepEqual(allTime.progress[0].source_ids, ['old-work']);
+});
+
+test('old imported same-day plans need confirmation and cannot be prescribed as this week’s next action', () => {
+  const source = { ...entry('old-plan', 'Task', 'Aaj lab me problem solve karuga', '2026-10-31T08:00:00Z'), event_timestamp: '2026-07-07T04:00:00Z' };
+  const parsed = parseSundayReview(report({ progress: [], experiences: [], intentions: [intention({ anchor_id:'old-plan',kind:'task',source_ids:['old-plan'] })], next_step:insight(['old-plan']) }), [source], reviewPeriod('all',now),'Asia/Kolkata');
+  assert.equal(parsed.next_step,null);
+  const merged = mergeIntentions([source],parsed.intentions,now);
+  assert.equal(merged[0].last_movement_at,source.event_timestamp);
+  assert.equal(merged[0].needs_confirmation,true);
+});
+
+test('recurring patterns require different original days rather than fragments imported together', () => {
+  const parsed = parseSundayReview(report({ patterns:[insight(['work','old-work'])] }),entries,reviewPeriod('all',now),'UTC');
+  assert.equal(parsed.patterns.length,1);
+});
+
+test('the primary reflection must ground both sides in exact quotes; invented connections cannot pass as evidence', () => {
+  const value = {before:{source_id:'wish',quote:'I want a PS6'},after:{source_id:'bought',quote:'Finally bought the PS6 I wanted'},focus:insight(['wish','bought']),question:'How does following through feel?'};
+  assert.ok(parseReviewFocus(value,entries,period));
+  assert.throws(()=>parseReviewFocus({...value,after:{source_id:'bought',quote:'Bought it with my bonus'}},entries,period),/changed its quoted evidence/);
+  assert.equal(parseReviewFocus({focus:null},entries,period),null);
 });
 
 test('missing evidence is not completion and an unsupported year-end deadline is dropped', () => {

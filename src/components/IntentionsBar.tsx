@@ -22,8 +22,9 @@ export function IntentionsBar() {
   if (!clock) return null;
   const now = new Date(clock), zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const horizon = yearHorizon(now, zone);
-  const active = intentions.filter((item) => !["completed", "released", "paused"].includes(item.status));
+  const active = intentions.filter((item) => !item.needs_confirmation && !["completed", "released", "paused"].includes(item.status));
   const item = active.find((entry) => entry.state) || active[0];
+  if (!item && pathname === "/digest") return null;
   const timing = item ? deadlineLabel(item.deadline, now, zone) : null;
   const funding = item?.state ? moneyProgress(item.state) : null;
   return <>

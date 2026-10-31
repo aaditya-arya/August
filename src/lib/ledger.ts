@@ -1,4 +1,5 @@
 import { intentionState, type IntentionState } from "./intention-state";
+import { memorySource, type MemorySource } from "./memory-source";
 
 /** Starter categories provide vocabulary and presentation, not a closed classification enum. */
 export const CATEGORY_DEFINITIONS = {
@@ -87,6 +88,7 @@ export function isObligation(category: string, action?: { kind?: unknown } | nul
 }
 
 export type CalendarAction = {
+  memory?: MemorySource;
   is_actionable: boolean;
   kind?: CalendarKind;
   title?: string;
@@ -98,6 +100,8 @@ export type CalendarAction = {
 
 export type LedgerItem = {
   id: string;
+  note_id?: string;
+  memory?: MemorySource | null;
   category: string;
   life_texture?: string;
   content: string;
@@ -114,13 +118,15 @@ export type LedgerItem = {
 export function normalizeStoredItem<T extends { category: string; calendar_action?: CalendarAction | null }>(item: T) {
   const classification = getClassification(item);
   const state = intentionState(item);
+  const memory = memorySource(item.calendar_action?.memory);
   return {
     ...item,
     category: classification.category,
     life_texture: classification.texture,
     review_state: state,
+    memory,
     // Stale calendar metadata cannot turn a reflection or expense into an obligation.
-    calendar_action: isObligation(classification.category, item.calendar_action) ? item.calendar_action : { is_actionable: false, ...(state ? { review_state: state } : {}) },
+    calendar_action: isObligation(classification.category, item.calendar_action) ? item.calendar_action : { is_actionable: false, ...(state ? { review_state: state } : {}), ...(memory ? { memory } : {}) },
   };
 }
 
