@@ -1,0 +1,45 @@
+.journal {
+  max-width: 1160px;
+  margin-inline: auto;
+  padding: 42px clamp(24px, 4vw, 64px) 90px;
+  background: radial-gradient(ellipse at 86% 5%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 43%);
+}
+.welcome { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-bottom: 35px; }
+.eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 9px; font-weight: 500; letter-spacing: .2em; color: var(--accent); }
+.eyebrow > span { width: 18px; height: 1px; background: currentColor; }
+.welcome h1 { font-size: clamp(34px, 3.4vw, 48px); font-weight: 400; line-height: 1.19; letter-spacing: -.055em; }
+.welcome h1 em { color: var(--accent); font-weight: 400; }
+.introduction { margin-top: 17px; font-size: 13px; line-height: 1.9; color: var(--muted); }
+.dateCard { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; margin: 24px 2px 0 0; color: var(--muted); }
+.dateCard svg { color: var(--accent); margin-bottom: 14px; }
+.dateCard > span:first-of-type { text-transform: uppercase; font-size: 9px; letter-spacing: .18em; }
+.dateCard strong { margin-top: 7px; font-family: var(--font-lora), Georgia, serif; font-size: 20px; font-weight: 400; color: var(--foreground); letter-spacing: -.03em; }
+.dateCaption { margin-top: 12px; font-family: var(--font-lora), Georgia, serif; font-size: 10px; font-style: italic; }
+.moments { border-top: 1px solid var(--border); padding-top: 30px; }
+.moments .eyebrow { margin-bottom: 8px; font-size: 8px; }
+.periods { display: inline-flex; gap: 3px; border: 1px solid var(--border); padding: 4px; border-radius: 9px; background: var(--surface); align-self: center; }
+.periods button { padding: 7px 12px; font-size: 10px; border-radius: 6px; color: var(--muted); transition: background 180ms, color 180ms; }
+.periods button:hover { color: var(--accent); }
+.periods button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 11%, var(--surface)); color: var(--accent); }
+.emptyMoments { display: flex; align-items: center; flex-direction: column; text-align: center; padding: 40px 22px; border: 1px dashed var(--border); border-radius: 14px; }
+.emptyMoments svg { color: var(--accent); margin-bottom: 14px; }
+.emptyMoments h3 { font-size: 18px; font-weight: 400; letter-spacing: -.025em; }
+.emptyMoments p { color: var(--muted); margin-top: 9px; font-size: 11px; line-height: 1.8; }
+@media (max-width: 1199px) {
+  .journal { padding-inline: 32px; }
+  .dateCaption { display: none; }
+}
+@media (max-width: 999px) {
+  .dateCard { display: none; }
+}
+@media (max-width: 639px) {
+  .journal { padding: 29px 18px 55px; }
+  .welcome { margin-bottom: 26px; }
+  .welcome h1 { font-size: 37px; }
+  .eyebrow { font-size: 8px; margin-bottom: 15px; }
+  .introduction { font-size: 12px; margin-top: 13px; max-width: 310px; }
+  .moments { padding-top: 25px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .periods button { transition: none; }
+}

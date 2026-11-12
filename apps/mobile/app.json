@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "August",
+    "slug": "august-ledger",
+    "version": "0.1.0",
+    "scheme": "august",
+    "orientation": "portrait",
+    "icon": "./assets/august-icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.august.ledger",
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/august-icon.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "runtimeVersion": { "policy": "fingerprint" }
+  }
+}

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { ingestNote } from "@/lib/ingestion";
 import { errorMessage } from "@/lib/errors";
 import { validTimezone } from "@/lib/time";
+import type { SaveNoteResponse } from "@august/shared";
 
 export const maxDuration = 300;
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
     const zone = validTimezone(timezone);
     if (!zone || (currentTime && !Number.isFinite(Date.parse(currentTime)))) return NextResponse.json({ error: "A valid timezone and reference time are required." }, { status: 400 });
     const result = await ingestNote(content.trim(), { key: request.headers.get("Idempotency-Key") || undefined, currentTime: currentTime || new Date().toISOString(), timezone: zone, syncCalendar: true });
-    return NextResponse.json(result);
+    return NextResponse.json(result satisfies SaveNoteResponse);
   } catch (error) {
     console.error("Notes API error:", errorMessage(error));
     return NextResponse.json({ error: errorMessage(error) }, { status: 503 });

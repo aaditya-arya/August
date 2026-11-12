@@ -2,6 +2,7 @@ import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { normalizeStoredItem, categoryStorageValues, type LedgerItem } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
+import type { ItemsResponse } from "@august/shared";
 
 export async function GET(request: Request) {
   try {
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
       items.push(...(data || []).map(entry => normalizeStoredItem(entry) as LedgerItem));
       if (!data || data.length < 500) break;
     }
-    return NextResponse.json({ items });
+    return NextResponse.json({ items } satisfies ItemsResponse);
   } catch (error) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }

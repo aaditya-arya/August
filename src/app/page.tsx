@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Loader2, Flame, Compass, ArrowRight, Quote } from "lucide-react";
+import { Loader2, BookOpen, Compass, ArrowRight, Quote, Sun } from "lucide-react";
 import { format, subDays, differenceInDays } from "date-fns";
 import Link from "next/link";
 import { WritingComposer } from "@/components/WritingComposer";
@@ -10,12 +10,18 @@ import { groupByCategory, getClassification, type LedgerItem } from "@/lib/ledge
 import { LedgerEntry } from "@/components/LedgerEntry";
 
 import { getRelativeTimeLabel } from "@/lib/time";
+import styles from "./page.module.css";
+import { createAugustApi } from "@august/shared";
+
+const api = createAugustApi();
 
 export default function LifeLedgerPage() {
   const [period, setPeriod] = useState<"7" | "30" | "all">("7");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [today] = useState(() => new Date());
   const pendingSubmission = useRef<{ content: string; key: string; currentTime: string } | null>(null);
 
@@ -30,14 +36,17 @@ export default function LifeLedgerPage() {
   useEffect(() => {
     const controller = new AbortController();
     fetchLedgerData(controller.signal).then((data) => {
-      if (!controller.signal.aborted) setItems(data);
+      if (!controller.signal.aborted) { setItems(data); setLoadError(null); }
     }).catch((error) => {
-      if (!controller.signal.aborted) console.error("Failed to load ledger items:", error);
+      if (!controller.signal.aborted) {
+        console.error("Failed to load ledger items:", error);
+        setLoadError("Your moments couldn’t be loaded. Your writing is safe; please try again.");
+      }
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [fetchLedgerData]);
+  }, [fetchLedgerData, retry]);
 
   const saveMoment = async (content: string) => {
     if (!pendingSubmission.current) {
@@ -50,24 +59,14 @@ export default function LifeLedgerPage() {
     const submission = pendingSubmission.current!;
     try { localStorage.setItem("august-pending-submission", JSON.stringify(submission)); } catch {}
 
-    const res = await fetch("/api/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": submission.key },
-      body: JSON.stringify({
-        content,
-        currentTime: submission.currentTime,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      }),
+    await api.saveNote({
+      ...submission,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to save moment");
-    }
-    await res.json();
     window.dispatchEvent(new Event("august-ledger-changed"));
     pendingSubmission.current = null;
     try { localStorage.removeItem("august-pending-submission"); } catch {}
-    await fetchLedgerData().then(setItems).catch((error) => console.error("Ledger refresh failed:", error));
+    await fetchLedgerData().then((data) => { setItems(data); setLoadError(null); }).catch(() => setLoadError("Your moment was saved, but the ledger couldn’t refresh. Try loading it again."));
   };
 
   // Filter items by active texture filter if set
@@ -91,53 +90,46 @@ export default function LifeLedgerPage() {
   const startDate = period === "7" ? subDays(today, 7) : period === "30" ? subDays(today, 30) : null;
 
   return (
-    <div className="mx-auto max-w-[1040px] px-5 pb-24 pt-9 sm:px-8 md:pt-12 lg:px-12">
-      <header className="mb-9 flex items-end justify-between gap-6">
+    <div className={styles.journal}>
+      <header className={styles.welcome}>
         <div>
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-[.22em] text-accent">The Life Ledger</p>
-          <h1 className="font-serif text-[clamp(1.9rem,3.1vw,2.65rem)] font-medium leading-tight tracking-[-.035em] text-foreground">Your life, in your words.</h1>
-          <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted">For the ordinary days, the big feelings, and everything in between.</p>
+          <p className={styles.eyebrow}><span /> YOUR LIFE, IN YOUR WORDS</p>
+          <h1>Make a little room<br />for <em>yourself.</em></h1>
+          <p className={styles.introduction}>A thought, a feeling, a small thing worth remembering.<br className="hidden sm:block" /> Whatever today holds, there’s a place for it here.</p>
         </div>
-        <span className="hidden shrink-0 pb-1 text-xs text-muted lg:block">{format(today, "EEEE, MMMM d")}</span>
+        <div className={styles.dateCard}>
+          <Sun size={23} strokeWidth={1.2} aria-hidden="true" />
+          <span>{format(today, "EEEE")}</span>
+          <strong>{format(today, "MMMM d")}</strong>
+          <span className={styles.dateCaption}>One day. A thousand little things.</span>
+        </div>
       </header>
 
       <WritingComposer onSave={saveMoment} />
 
-      <div id="writing-background">
+      <div id="writing-background" className={styles.moments}>
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[.2em] text-accent">Pages from your life</p>
-            <h2 className="font-serif text-2xl font-medium text-foreground">Your recent moments</h2>
+            <p className={styles.eyebrow}>THE THINGS YOU’VE KEPT</p>
+            <h2 className="font-serif text-2xl font-medium text-foreground">A life in little moments</h2>
             <p className="mt-2 text-xs text-muted">{startDate ? `${format(startDate, "MMM d")} – ${format(today, "MMM d, yyyy")}` : "All your moments, together"}</p>
           </div>
-          <div className="inline-flex rounded-2xl border border-rose-200/80 dark:border-rose-500/20 bg-white dark:bg-surface p-1 shadow-xs text-xs font-semibold self-start md:self-auto">
+          <div className={styles.periods} role="group" aria-label="Filter moments by time">
             <button
-              onClick={() => { if (period !== "7") { setLoading(true); setPeriod("7"); } }}
-              className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                period === "7"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-xs"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
+              onClick={() => { if (period !== "7") { setLoadError(null); setLoading(true); setPeriod("7"); } }}
+              aria-pressed={period === "7"}
             >
               This Week
             </button>
             <button
-              onClick={() => { if (period !== "30") { setLoading(true); setPeriod("30"); } }}
-              className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                period === "30"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-xs"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
+              onClick={() => { if (period !== "30") { setLoadError(null); setLoading(true); setPeriod("30"); } }}
+              aria-pressed={period === "30"}
             >
               30 Days
             </button>
             <button
-              onClick={() => { if (period !== "all") { setLoading(true); setPeriod("all"); } }}
-              className={`px-3.5 py-1.5 rounded-xl transition-all ${
-                period === "all"
-                  ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-xs"
-                  : "text-zinc-600 dark:text-muted hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
+              onClick={() => { if (period !== "all") { setLoadError(null); setLoading(true); setPeriod("all"); } }}
+              aria-pressed={period === "all"}
             >
               All Time
             </button>
@@ -194,16 +186,21 @@ export default function LifeLedgerPage() {
         </div>
 
         {/* 6. BESPOKE VISUAL TREATMENTS FOR DIFFERENT ITEM TEXTURES */}
-        {loading ? (
+        {loadError ? (
+          <div role="alert" className="rounded-xl border border-border bg-surface p-6 text-sm">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => { setLoadError(null); setLoading(true); setRetry((value) => value + 1); }} className="mt-3 rounded-lg bg-accent px-4 py-2 text-white dark:text-background">Try again</button>
+          </div>
+        ) : loading ? (
           <div className="py-24 flex justify-center items-center">
             <Loader2 className="animate-spin text-rose-500" size={36} />
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-rose-200/80 dark:border-rose-500/20 rounded-3xl bg-white/60 dark:bg-surface/60 p-8">
-            <Flame className="mx-auto text-rose-400 mb-2" size={32} />
-            <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">Your ledger is ready</h3>
-            <p className="text-zinc-500 dark:text-muted text-xs mt-1">
-              Log your daily micro-moments, tasks, expenses, or lessons in the box above.
+          <div className={styles.emptyMoments}>
+            <BookOpen size={25} strokeWidth={1.3} aria-hidden="true" />
+            <h3>{activeCategoryFilter ? "A quiet corner, for now." : "Your story starts with a small moment."}</h3>
+            <p>
+              {activeCategoryFilter ? "No moments in this category yet. Try another filter, or write something new." : "The words you keep will find a home here. There’s no right place to begin."}
             </p>
           </div>
         ) : (

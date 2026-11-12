@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+August uses Next.js for the web app and backend, and Expo / React Native for Android, in one npm-workspaces repository. See [ANDROID.md](ANDROID.md) for local mobile setup, shared code, release coordination, and Supabase diagnostics.
 
 ## Getting Started
 
