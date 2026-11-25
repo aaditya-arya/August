@@ -3,16 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
     "packages/*"
   ],
   "scripts": {
     "dev": "next dev",
-    "dev:mobile": "npm run start --workspace @august/mobile",
-    "android": "npm run android --workspace @august/mobile",
-    "build:android:preview": "npm run build:android:preview --workspace @august/mobile --",
-    "update:android:preview": "npm run update:android:preview --workspace @august/mobile --",
-    "check:mobile": "npm run typecheck --workspace @august/mobile",
+    "dev:lan": "node scripts/dev-lan.cjs",
+    "android": "node scripts/android.cjs install",
+    "build:android": "node scripts/android.cjs build",
+    "check:android": "node scripts/android.cjs check",
+    "test:android:device": "node scripts/android.cjs device-test",
     "check:supabase": "node scripts/check-supabase.cjs",
     "build": "next build",
     "start": "next start",

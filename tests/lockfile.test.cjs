@@ -4,7 +4,7 @@ const { posix } = require('node:path');
 const lock = require('../package-lock.json');
 
 // npm on one OS can leave transitive dependencies of another platform's optional
-// packages out of the lockfile. EAS's Linux npm ci then rejects the entire tree.
+// packages out of the lockfile. A clean installation on another OS then fails.
 test('lockfile includes required transitive dependencies on every platform', () => {
   const missing = [];
   for (const [location, entry] of Object.entries(lock.packages)) {

@@ -1,6 +1,6 @@
 # August
 
-August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, and a graph of related thoughts. Next.js serves the web app and backend; Expo / React Native provides the Android app in the same npm-workspaces repository.
+August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, and a graph of related thoughts. Next.js serves the web app and backend. The native Kotlin / Jetpack Compose Android client lives in `apps/android`.
 
 ## Run on another PC
 
@@ -28,7 +28,9 @@ There is no need to copy `node_modules`, `.next`, or generated Android/iOS folde
 
 ## Android
 
-Run `npm run dev:mobile` from another terminal. See [ANDROID.md](ANDROID.md) for native development/preview builds, backend addresses, and EAS releases. Root server credentials must never be copied into the mobile environment.
+For the new native Material 3 application, open `apps/android` in Android Studio or follow [its build and setup guide](apps/android/README.md). It builds an installable APK using Gradle and uses the existing authenticated backend.
+
+For a phone on the same Wi-Fi, run `npm run dev:lan` and enter the printed Wi-Fi address in the app. Tap **Check connection**, then **Continue with Google**. See [ANDROID.md](ANDROID.md) for firewall setup, native builds, and connection troubleshooting. Root server credentials must never be copied into the Android client.
 
 ## Checks and implementation notes
 
@@ -36,8 +38,7 @@ Run `npm run dev:mobile` from another terminal. See [ANDROID.md](ANDROID.md) for
 npm test
 npm run lint
 npm run build
-npm run check:mobile
-npm run lint --workspace @august/mobile
+npm run check:android
 ```
 
 See [tests/README.md](tests/README.md) for the optional in-memory PostgreSQL/pgvector migration test, which requires separate local test dependencies. [CLASSIFICATION.md](CLASSIFICATION.md), [RELIABILITY.md](RELIABILITY.md), and [SUNDAY_REVIEW.md](SUNDAY_REVIEW.md) explain the AI and persistence behavior.

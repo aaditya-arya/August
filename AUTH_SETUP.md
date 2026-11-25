@@ -43,10 +43,12 @@ Under Supabase → **Authentication → URL Configuration**:
 | --- | --- |
 | Site URL during local testing | `http://localhost:3000` |
 | Additional redirect URL for local web | `http://localhost:3000/auth/callback` |
-| Additional redirect URL for Android | `august://auth/callback` |
+| Android callback pattern | `augustnative://auth/callback?native_state=*` |
 | Additional redirect URL after deployment | `https://YOUR_WEB_HOST/auth/callback` |
 
-Set Site URL to the real HTTPS web origin when deploying. Keep the exact native callback in the allowlist. Native authentication uses a PKCE code exchange and your installed August app's URL scheme. Use an August development or preview build for this flow; Expo Go is not the target for the custom callback.
+Set Site URL to the real HTTPS web origin when deploying. Native authentication uses a PKCE code exchange and the installed August app's URL scheme. Install the development APK or a signed release build to use the callback.
+
+The Kotlin client's callback pattern allows a per-attempt state query, validated along with PKCE in the app. See [the native Android guide](apps/android/README.md). Google's registered web-client callback remains Supabase's `/auth/v1/callback`.
 
 ## 4. Verify before distributing
 
@@ -95,18 +97,6 @@ Refresh the app after assignment. Account ownership cannot be changed through an
 
 ## Android releases after setup
 
-This change adds native authentication/storage modules, so install one new preview APK:
-
-```powershell
-npm run build:android:preview
-```
-
-After that, publish compatible JavaScript/UI changes with:
-
-```powershell
-npm run update:android:preview -- --message "Describe the change"
-```
-
-The update command works from the root or `apps/mobile`. Login, EAS project initialization, and keystore creation do not need repeating. Devices receive compatible updates through Expo Updates on app launches; they do not all update at the same instant. Native dependencies, permissions, and configuration changes require a new APK. See [Expo's update lifecycle](https://docs.expo.dev/eas-update/how-it-works/).
+Build the native APK with `npm run build:android`, or open `apps/android` in Android Studio. Run `npm run check:android` before distributing changes. Install each new APK on the device; release signing is configured separately. See [ANDROID.md](ANDROID.md) for phone connections and [the native guide](apps/android/README.md) for Gradle tasks.
 
 For Google Keep imports, reload the updated extension, keep a signed-in August browser tab open, and run sync from Keep. The extension sends the import through the August tab's same-origin session. It asks for access only to the HTTPS server you select and does not copy login tokens.
