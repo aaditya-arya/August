@@ -1,10 +1,11 @@
+import { withAccount } from "@/lib/auth-server";
 import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { normalizeStoredItem, categoryStorageValues, type LedgerItem } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
 import type { ItemsResponse } from "@august/shared";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
@@ -42,3 +43,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }
+
+export const GET = withAccount(handleGET);

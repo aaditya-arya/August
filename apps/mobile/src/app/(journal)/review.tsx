@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { createAugustApi, type Period, type Insight } from '@august/shared';
-import { Button, Card, Heading, Loading, Notice, Screen, s } from '../components/ui';
-import { useRemote } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { Button, Card, Heading, Loading, Notice, Screen, s } from '../../components/ui';
+import { useRemote } from '../../lib/journal';
+import { useTheme } from '../../lib/theme';
 
 export default function ReviewScreen() {
   const c = useTheme();

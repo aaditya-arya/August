@@ -2,17 +2,23 @@
   "name": "potvt",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "dev:mobile": "npm run start --workspace @august/mobile",
     "android": "npm run android --workspace @august/mobile",
+    "build:android:preview": "npm run build:android:preview --workspace @august/mobile --",
+    "update:android:preview": "npm run update:android:preview --workspace @august/mobile --",
     "check:mobile": "npm run typecheck --workspace @august/mobile",
     "check:supabase": "node scripts/check-supabase.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "tsc -p tsconfig.test.json && tsc -p packages/shared/tsconfig.test.json && node --test tests/*.test.cjs",
+    "test:accounts:sql": "node tests/account-migration.cjs",
     "test:ai": "tsc -p tsconfig.test.json && node tests/live-extraction.cjs",
     "repair:classifications": "tsc -p tsconfig.test.json && node scripts/repair-classifications.cjs",
     "test:taxonomy": "tsc -p tsconfig.test.json && node tests/live-taxonomy.cjs",
@@ -21,6 +27,7 @@
   "dependencies": {
     "@august/shared": "0.1.0",
     "@google/genai": "^2.23.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
@@ -33,6 +40,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

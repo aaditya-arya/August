@@ -79,6 +79,8 @@ test('catalogue reloads use saved examples, coalesce requests, and refresh incre
   require.cache[modulePath] = { id: modulePath, filename: modulePath, loaded: true, exports: { supabase: db } };
   t.after(() => { if (previous) require.cache[modulePath] = previous; else delete require.cache[modulePath]; });
   const { loadCategoryCatalogue } = require('../.test-build/category-catalogue.js');
+  const { runWithAccount } = require('../.test-build/account-context.js');
+  await runWithAccount({ userId: 'catalogue-test-owner', database: db }, async () => {
   const [first, same] = await Promise.all([loadCategoryCatalogue(), loadCategoryCatalogue()]);
   assert.equal(first, same); assert.equal(requests.length, 1);
   assert.ok(first.some((entry) => entry.category === 'Dream Journal' && entry.examples.includes('A dream of flying')));
@@ -88,4 +90,5 @@ test('catalogue reloads use saved examples, coalesce requests, and refresh incre
   assert.equal(requests[1], '2026-10-30T10:00:00Z');
   assert.ok(next.some((entry) => entry.category === 'Health Measurements'));
   assert.ok(next.some((entry) => entry.category === 'Dream Journal'));
+  });
 });

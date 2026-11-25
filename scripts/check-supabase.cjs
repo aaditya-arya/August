@@ -13,10 +13,20 @@ async function main() {
     ['extracted_items', 'id,note_id,category,content,tags,sentiment_or_mood,event_timestamp,created_at,calendar_action,calendar_status,google_event_id,embedding'],
     ['graph_edges', 'id,source_node_id,target_node_id,weight,link_type'],
   ]) {
-    const { status, error } = await client.from(table).select(columns, { head: true }).limit(1).abortSignal(AbortSignal.timeout(15_000));
-    if (error) healthy = false;
-    console.log(JSON.stringify({ check: table, status, code: error?.code || null, message: error?.message || 'Required columns accessible; no journal content read.' }));
+    let { status, error } = await client.from(table).select(columns, { head: true }).limit(1).abortSignal(AbortSignal.timeout(15_000));
+    // HEAD responses contain no error body. Ask for zero rows to distinguish an
+    // expected permission denial from an invalid key without reading any data.
+    if ((status === 401 || status === 403) && !error?.code) {
+      ({ status, error } = await client.from(table).select(columns).limit(0).abortSignal(AbortSignal.timeout(15_000)));
+    }
+    const blocked = (status === 401 || status === 403) && error?.code === '42501';
+    if (!blocked) healthy = false;
+    console.log(JSON.stringify({ check: table, status, code: error?.code || null, message: blocked ? 'Anonymous table access denied as expected.' : !error ? 'Anonymous table access is still allowed. Apply the account ownership migration before using personal data.' : error.message }));
   }
+  const settings = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, signal: AbortSignal.timeout(15_000) });
+  const googleEnabled = settings.ok && Boolean((await settings.json()).external?.google);
+  console.log(JSON.stringify({ check: 'google-sign-in', enabled: googleEnabled }));
+  if (!googleEnabled) healthy = false;
   if (process.argv.includes('--realtime')) {
     const result = await new Promise(resolve => {
       const timer = setTimeout(() => resolve('TIMED_OUT'), 15_000);

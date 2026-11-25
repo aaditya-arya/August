@@ -1,22 +1,15 @@
-import { Tabs } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Text } from 'react-native';
+import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { JournalProvider } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { JournalProvider, useJournal } from '../lib/journal';
 
-const tabs = [
-  { name: 'index', title: 'Write', icon: '✎' },
-  { name: 'moments', title: 'Moments', icon: '▤' },
-  { name: 'review', title: 'Review', icon: '◷' },
-  { name: 'graph', title: 'Graph', icon: '⌘' },
-  { name: 'settings', title: 'Settings', icon: '⚙' },
-];
+function Routes() {
+  const { user } = useJournal();
+  return <Stack screenOptions={{ headerShown: false }}>
+    <Stack.Protected guard={!!user}><Stack.Screen name="(journal)" /></Stack.Protected>
+    <Stack.Protected guard={!user}><Stack.Screen name="sign-in" /></Stack.Protected>
+    <Stack.Screen name="auth/callback" />
+  </Stack>;
+}
 export default function Layout() {
-  const c = useTheme();
-  return <SafeAreaProvider><JournalProvider><StatusBar style="auto" />
-    <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: c.accent, tabBarInactiveTintColor: c.muted, tabBarHideOnKeyboard: true, tabBarStyle: { backgroundColor: c.paper, borderTopColor: c.border }, tabBarLabelStyle: { fontSize: 10 }, sceneStyle: { backgroundColor: c.background } }}>
-      {tabs.map(tab => <Tabs.Screen key={tab.name} name={tab.name} options={{ title: tab.title, tabBarIcon: ({ color }) => <Text style={{ fontSize: 23, color }}>{tab.icon}</Text> }} />)}
-    </Tabs>
-  </JournalProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><JournalProvider><Routes /></JournalProvider></SafeAreaProvider>;
 }

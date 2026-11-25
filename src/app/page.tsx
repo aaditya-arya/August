@@ -12,10 +12,13 @@ import { LedgerEntry } from "@/components/LedgerEntry";
 import { getRelativeTimeLabel } from "@/lib/time";
 import styles from "./page.module.css";
 import { createAugustApi } from "@august/shared";
+import { useAccount } from '@/components/AuthBoundary';
 
 const api = createAugustApi();
 
 export default function LifeLedgerPage() {
+  const account = useAccount();
+  const pendingKey = `august-pending-submission:${account.id}`;
   const [period, setPeriod] = useState<"7" | "30" | "all">("7");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [items, setItems] = useState<LedgerItem[]>([]);
@@ -51,13 +54,13 @@ export default function LifeLedgerPage() {
   const saveMoment = async (content: string) => {
     if (!pendingSubmission.current) {
       try {
-        const saved = JSON.parse(localStorage.getItem("august-pending-submission") || "null");
+        const saved = JSON.parse(localStorage.getItem(pendingKey) || "null");
         if (saved && typeof saved.content === "string" && typeof saved.key === "string" && typeof saved.currentTime === "string") pendingSubmission.current = saved;
       } catch {}
     }
     if (pendingSubmission.current?.content !== content) pendingSubmission.current = { content, key: crypto.randomUUID(), currentTime: new Date().toISOString() };
     const submission = pendingSubmission.current!;
-    try { localStorage.setItem("august-pending-submission", JSON.stringify(submission)); } catch {}
+    try { localStorage.setItem(pendingKey, JSON.stringify(submission)); } catch {}
 
     await api.saveNote({
       ...submission,
@@ -65,7 +68,7 @@ export default function LifeLedgerPage() {
     });
     window.dispatchEvent(new Event("august-ledger-changed"));
     pendingSubmission.current = null;
-    try { localStorage.removeItem("august-pending-submission"); } catch {}
+    try { if (JSON.parse(localStorage.getItem(pendingKey) || 'null')?.key === submission.key) localStorage.removeItem(pendingKey); } catch {}
     await fetchLedgerData().then((data) => { setItems(data); setLoadError(null); }).catch(() => setLoadError("Your moment was saved, but the ledger couldn’t refresh. Try loading it again."));
   };
 

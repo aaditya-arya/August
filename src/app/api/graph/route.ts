@@ -1,3 +1,4 @@
+import { withAccount } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { getClassification } from "@/lib/ledger";
 import { supabase } from "@/lib/supabase";
@@ -6,7 +7,7 @@ import type { GraphEdge, ExtractedItemNode } from "@/lib/graph-math";
 import { errorMessage } from "@/lib/errors";
 
 export const maxDuration = 300;
-export async function GET() {
+async function handleGET() {
   try {
     const items: ExtractedItemNode[] = [];
     const edges: GraphEdge[] = [];
@@ -28,9 +29,12 @@ export async function GET() {
     return NextResponse.json({ nodes, links, stats: { nodeCount: nodes.length, edgeCount: links.length, semanticCount: links.filter((link) => link.link_type === "semantic").length, tagCount: links.filter((link) => link.link_type === "explicit_tag").length } });
   } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
-export async function POST() {
+async function handlePOST() {
   try {
     const result = await backfillGraphEdges();
     return NextResponse.json({ success: result.errors.length === 0, ...result }, { status: result.errors.length ? 500 : 200 });
   } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
+
+export const GET = withAccount(handleGET);
+export const POST = withAccount(handlePOST);

@@ -16,6 +16,11 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBtn.disabled = true;
 
     try {
+      const apiUrl = new URL(apiUrlInput.value.trim() || "http://localhost:3000/api/import/keep");
+      if ((apiUrl.protocol !== 'https:' && !(apiUrl.protocol === 'http:' && apiUrl.hostname === 'localhost')) || apiUrl.username || apiUrl.password || apiUrl.pathname !== '/api/import/keep' || apiUrl.search || apiUrl.hash) throw new Error('Use your August HTTPS address followed by /api/import/keep.');
+      const originPattern = `${apiUrl.origin}/*`;
+      // Request only the destination selected by the user; no session tokens are copied.
+      if (!await chrome.permissions.request({ origins: [originPattern] })) throw new Error('Allow access to your August server to import notes.');
       // 1. Get active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -46,24 +51,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
       statusText.innerText = `Scraped ${notes.length} notes! Processing AI extraction & embeddings...`;
 
-      // 3. Send to Write Backend
-      const apiUrl = apiUrlInput.value.trim() || "http://localhost:3000/api/import/keep";
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Run in the signed-in August tab so its same-origin session stays there.
+      const augustTabs = await chrome.tabs.query({ url: originPattern });
+      const augustTab = augustTabs.find(candidate => candidate.id && new URL(candidate.url).origin === apiUrl.origin);
+      if (!augustTab) throw new Error('Open August in another tab and sign in, then return to Keep and retry.');
+      const imported = await chrome.scripting.executeScript({
+        target: { tabId: augustTab.id }, world: 'MAIN',
+        args: [apiUrl.origin, { notes, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }],
+        func: async (expectedOrigin, body) => {
+          if (location.origin !== expectedOrigin) return { ok: false, status: 0, data: { error: 'The August tab changed. Please retry.' } };
+          try {
+            const response = await fetch('/api/import/keep', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            return { ok: response.ok, status: response.status, data: await response.json() };
+          } catch { return { ok: false, status: 0, data: { error: 'Could not reach August. Please retry.' } }; }
         },
-        body: JSON.stringify({
-          notes,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
+      const response = imported?.[0]?.result;
+      if (!response?.ok) throw new Error(response?.status === 401 ? 'Sign in to August in its browser tab, then retry.' : response?.data?.error || 'The import failed. Please retry.');
+      const data = response.data;
 
       statusSpinner.classList.add("hidden");
       statusText.innerText = data.failedCount ? `Saved ${notes.length - data.failedCount} notes; ${data.failedCount} failed. Retry to save the remaining notes without duplicating successful imports.` : "Successfully synced to Write!";

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { openSession, sealSession } from "./calendar-session";
 import { errorMessage } from "./errors";
 import type { CalendarAction } from "./ledger";
+import { currentAccount } from './account-context';
 
 export type GoogleTokens = { access_token?: string; refresh_token?: string; expires_at?: number; token_type?: string; scope?: string };
 const COOKIE = "august_calendar";
@@ -13,23 +14,23 @@ export async function getStoredTokens(): Promise<GoogleTokens | null> {
   const value = (await cookies()).get(COOKIE)?.value;
   if (value) {
     const data = openSession(value, secret());
-    if (!data || typeof data !== "object") return null;
+    if (!data || typeof data !== "object" || !('userId' in data) || data.userId !== currentAccount().userId) return null;
     if ("disconnected" in data) return null;
     if (("refresh_token" in data && typeof data.refresh_token === "string") || ("access_token" in data && typeof data.access_token === "string")) return data as GoogleTokens;
     return null;
   }
-  return process.env.GOOGLE_REFRESH_TOKEN ? { refresh_token: process.env.GOOGLE_REFRESH_TOKEN } : null;
+  return null;
 }
 
 export async function saveStoredTokens(tokens: GoogleTokens): Promise<void> {
   const previous = await getStoredTokens();
-  const value = sealSession({ ...previous, ...tokens, refresh_token: tokens.refresh_token || previous?.refresh_token }, secret());
+  const value = sealSession({ ...previous, ...tokens, userId: currentAccount().userId, refresh_token: tokens.refresh_token || previous?.refresh_token }, secret());
   if (value.length > 3800) throw new Error("Calendar session is too large to store.");
   (await cookies()).set(COOKIE, value, cookieOptions);
 }
 
 export async function clearStoredTokens(): Promise<void> {
-  // A tombstone also disconnects sessions when a deployment has a default refresh token.
+  // Calendar credentials are account-bound; no shared server token is used.
   if (secret()) (await cookies()).set(COOKIE, sealSession({ disconnected: true }, secret()), cookieOptions);
   else (await cookies()).delete(COOKIE);
 }

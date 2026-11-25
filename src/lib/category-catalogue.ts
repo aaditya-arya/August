@@ -1,15 +1,18 @@
 import { supabase } from "./supabase";
 import { mergeCategoryCatalogue } from "./taxonomy";
 import type { CategoryDefinition } from "./ledger";
+import { accountResource } from './account-context';
 
-let cache: { entries: CategoryDefinition[]; loadedAt: number; watermark: string | null } | null = null;
-let pending: Promise<CategoryDefinition[]> | null = null;
+type State = { cache: { entries: CategoryDefinition[]; loadedAt: number; watermark: string | null } | null; pending: Promise<CategoryDefinition[]> | null };
+const state = () => accountResource<State>('categories', () => ({ cache: null, pending: null }));
 
 /** Names persist in the existing category column; representative entries supply their scope. */
 export async function loadCategoryCatalogue(force = false): Promise<CategoryDefinition[]> {
+  const account = state();
+  const { cache, pending } = account;
   if (!force && cache && Date.now() - cache.loadedAt < 60_000) return cache.entries;
   if (pending) return pending;
-  pending = (async () => {
+  account.pending = (async () => {
     let entries = mergeCategoryCatalogue([], cache?.entries);
     const since = cache?.watermark;
     let watermark = since || null;
@@ -22,10 +25,10 @@ export async function loadCategoryCatalogue(force = false): Promise<CategoryDefi
       if (data.length) watermark = data[data.length - 1].created_at;
       if (data.length < 500) break;
     }
-    cache = { entries, loadedAt: Date.now(), watermark };
+    account.cache = { entries, loadedAt: Date.now(), watermark };
     return entries;
   })();
-  try { return await pending; } finally { pending = null; }
+  try { return await account.pending; } finally { account.pending = null; }
 }
 
-export function rememberCategoryCatalogue(entries: CategoryDefinition[]) { cache = { entries, loadedAt: Date.now(), watermark: cache?.watermark || null }; }
+export function rememberCategoryCatalogue(entries: CategoryDefinition[]) { const account = state(); account.cache = { entries, loadedAt: Date.now(), watermark: account.cache?.watermark || null }; }

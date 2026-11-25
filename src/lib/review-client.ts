@@ -43,4 +43,5 @@ export const reviewLoader = createReviewLoader(async (days, timezone, refresh) =
 if (typeof window !== "undefined") {
   window.addEventListener("august-intentions-changed", () => reviewLoader.invalidate());
   window.addEventListener("august-ledger-changed", () => reviewLoader.invalidate());
+  window.addEventListener("august-account-changed", () => reviewLoader.invalidate());
 }

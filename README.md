@@ -1,36 +1,43 @@
-August uses Next.js for the web app and backend, and Expo / React Native for Android, in one npm-workspaces repository. See [ANDROID.md](ANDROID.md) for local mobile setup, shared code, release coordination, and Supabase diagnostics.
+# August
 
-## Getting Started
+August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, and a graph of related thoughts. Next.js serves the web app and backend; Expo / React Native provides the Android app in the same npm-workspaces repository.
 
-First, run the development server:
+## Run on another PC
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Install Git and Node.js with npm. The current working environment uses Node.js 22.23.1 and npm 10.9.8.
+
+Clone the branch containing the current web and Android implementation:
+
+```powershell
+git clone --branch AndroidAppPushes https://github.com/aaditya-arya/August.git
+cd August
+npm ci
+Copy-Item .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Fill in `.env.local`, or privately transfer your existing file instead of copying the template. Keep real credentials out of Git. Supabase Google sign-in and the account ownership migration must be configured as described in [AUTH_SETUP.md](AUTH_SETUP.md). An existing Supabase project's dashboard configuration is shared across PCs; it does not need repeating for each clone.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm run check:supabase
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000) and sign in. The same account and Supabase project provide the same saved journal entries. Unsaved drafts remain on their original device/browser, and Google Calendar must be connected in the new browser.
 
-## Learn More
+There is no need to copy `node_modules`, `.next`, or generated Android/iOS folders. For production web hosting, configure the environment on the host and run `npm run build` followed by `npm start`, or use a Next.js-compatible hosting service.
 
-To learn more about Next.js, take a look at the following resources:
+## Android
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run `npm run dev:mobile` from another terminal. See [ANDROID.md](ANDROID.md) for native development/preview builds, backend addresses, and EAS releases. Root server credentials must never be copied into the mobile environment.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Checks and implementation notes
 
-## Deploy on Vercel
+```powershell
+npm test
+npm run lint
+npm run build
+npm run check:mobile
+npm run lint --workspace @august/mobile
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [tests/README.md](tests/README.md) for the optional in-memory PostgreSQL/pgvector migration test, which requires separate local test dependencies. [CLASSIFICATION.md](CLASSIFICATION.md), [RELIABILITY.md](RELIABILITY.md), and [SUNDAY_REVIEW.md](SUNDAY_REVIEW.md) explain the AI and persistence behavior.

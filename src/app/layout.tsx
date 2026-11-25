@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { themeInitScript } from "@/lib/theme";
+import { AuthBoundary } from '@/components/AuthBoundary';
 
 const dmSans = localFont({
   src: "./fonts/dm-sans-latin-variable.woff2",
@@ -53,11 +54,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col md:flex-row selection:bg-rose-500/30 selection:text-rose-900 dark:selection:text-rose-200 antialiased">
+        <AuthBoundary>
         <Sidebar />
         <main className="flex-1 min-w-0 relative min-h-screen bg-background md:h-dvh md:min-h-0 md:overflow-y-auto">
           <IntentionsBar />
           {children}
         </main>
+        </AuthBoundary>
       </body>
     </html>
   );

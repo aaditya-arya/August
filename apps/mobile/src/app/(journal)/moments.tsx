@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, Share, Text, TextInput, View } from 'react-native';
 import { type Period, type Moment, createAugustApi } from '@august/shared';
-import { Button, Card, Heading, Notice, Screen, s } from '../components/ui';
-import { useRemote } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { Button, Card, Heading, Notice, Screen, s } from '../../components/ui';
+import { useRemote } from '../../lib/journal';
+import { useTheme } from '../../lib/theme';
 
 export default function MomentsScreen() {
   const c = useTheme();

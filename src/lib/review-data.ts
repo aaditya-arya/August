@@ -1,14 +1,17 @@
 import { supabase } from "./supabase";
 import { normalizeStoredItem, type LedgerItem } from "./ledger";
+import { accountResource } from './account-context';
 
-let cached: { entries: LedgerItem[]; time: number } | null = null;
-let pending: Promise<LedgerItem[]> | null = null;
-export function invalidateReviewData() { cached = null; }
+type State = { cached: { entries: LedgerItem[]; time: number } | null; pending: Promise<LedgerItem[]> | null };
+const state = () => accountResource<State>('review-data', () => ({ cached: null, pending: null }));
+export function invalidateReviewData() { state().cached = null; }
 
 export async function readReviewEntries(force = false): Promise<LedgerItem[]> {
+  const account = state();
+  const { cached, pending } = account;
   if (!force && cached && Date.now() - cached.time < 20_000) return cached.entries;
   if (pending) return pending;
-  pending = (async () => {
+  account.pending = (async () => {
     const entries: LedgerItem[] = [];
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from("extracted_items")
@@ -18,10 +21,10 @@ export async function readReviewEntries(force = false): Promise<LedgerItem[]> {
       entries.push(...data.map((entry) => normalizeStoredItem(entry) as LedgerItem));
       if (data.length < 500) break;
     }
-    cached = { entries, time: Date.now() };
+    account.cached = { entries, time: Date.now() };
     return entries;
   })();
-  try { return await pending; } finally { pending = null; }
+  try { return await account.pending; } finally { account.pending = null; }
 }
 
 export async function readReviewSources(entries: LedgerItem[]) {

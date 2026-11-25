@@ -4,22 +4,23 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { ArrowUpRight, Check, Feather, Heart, Leaf, Loader2, Maximize2, Minimize2, RefreshCw, Sparkles, AlignLeft, Type, Wind } from "lucide-react";
 import styles from "./WritingComposer.module.css";
 import { writingModes } from "@august/shared";
+import { useAccount } from './AuthBoundary';
 
 const modeIcons = [Feather, Heart, Wind, Sparkles];
 
 const DRAFT_KEY = "august-writing-draft";
 const DRAFT_EVENT = "august-draft-change";
-let currentDraft: string | undefined;
+const drafts = new Map<string, string>();
 
-function getDraft() {
-  if (currentDraft === undefined) {
+function getDraft(key: string) {
+  if (!drafts.has(key)) {
     try {
-      currentDraft = localStorage.getItem(DRAFT_KEY) || "";
+      drafts.set(key, localStorage.getItem(key) || "");
     } catch {
-      currentDraft = "";
+      drafts.set(key, "");
     }
   }
-  return currentDraft;
+  return drafts.get(key)!;
 }
 
 function subscribeToDraft(callback: () => void) {
@@ -27,12 +28,12 @@ function subscribeToDraft(callback: () => void) {
   return () => window.removeEventListener(DRAFT_EVENT, callback);
 }
 
-function updateDraft(value: string) {
-  currentDraft = value;
+function updateDraft(key: string, value: string) {
+  drafts.set(key, value);
   let persisted = true;
   try {
-    if (value) localStorage.setItem(DRAFT_KEY, value);
-    else localStorage.removeItem(DRAFT_KEY);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
   } catch {
     persisted = false;
   }
@@ -47,7 +48,10 @@ type WritingComposerProps = {
 };
 
 export function WritingComposer({ onSave }: WritingComposerProps) {
-  const content = useSyncExternalStore(subscribeToDraft, getDraft, getServerDraft);
+  const account = useAccount();
+  const draftKey = `${DRAFT_KEY}:${account.id}`;
+  const content = useSyncExternalStore(subscribeToDraft, () => getDraft(draftKey), getServerDraft);
+  const legacy = useSyncExternalStore(subscribeToDraft, () => getDraft(DRAFT_KEY), getServerDraft);
   const [isFocused, setIsFocused] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +65,8 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const focusButtonRef = useRef<HTMLButtonElement>(null);
   const savingRef = useRef(false);
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const id = useId();
   const wordCount = content.trim() ? content.trim().split(/\s+/u).length : 0;
   const mode = writingModes[modeIndex];
@@ -107,9 +113,9 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
   }, [isFocused]);
 
   function usePrompt() {
-    const draft = getDraft();
+    const draft = getDraft(draftKey);
     const next = `${draft.trimEnd()}${draft.trim() ? "\n\n" : ""}${prompt}\n`;
-    setDraftPersisted(updateDraft(next));
+    setDraftPersisted(updateDraft(draftKey, next));
     setSaved(false);
     setError(null);
     requestAnimationFrame(() => {
@@ -127,8 +133,9 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
     const submittedContent = content;
     try {
       await onSave(submittedContent.trim());
+      if (!mounted.current) return;
       // A new draft typed while the request is in flight belongs to the writer.
-      if (getDraft() === submittedContent) updateDraft("");
+      if (getDraft(draftKey) === submittedContent) updateDraft(draftKey, "");
       setSaved(true);
     } catch {
       setError("Your moment couldn’t be saved. Your writing is still here—please try again.");
@@ -206,7 +213,7 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
               placeholder={mode.placeholder}
               className={`${styles.editor} ${ruled ? styles.ruled : ""} ${largeText ? styles.largeText : ""}`}
               onChange={(event) => {
-                setDraftPersisted(updateDraft(event.target.value));
+                setDraftPersisted(updateDraft(draftKey, event.target.value));
                 setSaved(false);
                 setError(null);
               }}
@@ -264,6 +271,14 @@ export function WritingComposer({ onSave }: WritingComposerProps) {
         {saved && <p role="status" className="flex items-center gap-2 px-6 pb-5 text-sm text-emerald-700 dark:text-emerald-300 sm:px-10"><Check size={15} /> Your moment has a home in your ledger.</p>}
       </form>
       <p className={styles.afterword}><Leaf size={13} aria-hidden="true" /> Some days, a sentence is enough.</p>
+      {!!legacy && <div className="mt-6 rounded-xl border border-border bg-surface p-4 text-xs leading-6 text-muted">
+        <p>A local draft from before sign-in is still on this device.</p>
+        <button type="button" disabled={isSaving} className="mt-2 text-accent underline disabled:opacity-50" onClick={() => {
+          const next = `${content.trimEnd()}${content.trim() ? '\n\n' : ''}${legacy}`;
+          if (updateDraft(draftKey, next)) { updateDraft(DRAFT_KEY, ''); setSaved(false); setError(null); }
+          else setError('The draft could not be stored. The original is still kept on this device.');
+        }}>Recover earlier draft</button>
+      </div>}
     </section>
   );
 }

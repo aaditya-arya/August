@@ -36,8 +36,11 @@ test('cookie token storage and deterministic Calendar IDs work without filesyste
   process.env.CALENDAR_TOKEN_SECRET = 'test-cookie-secret';
   t.after(() => { if (previous) require.cache[modulePath] = previous; else delete require.cache[modulePath]; if (oldSecret === undefined) delete process.env.CALENDAR_TOKEN_SECRET; else process.env.CALENDAR_TOKEN_SECRET = oldSecret; });
   const calendar = require('../.test-build/calendar-server.js');
+  const { runWithAccount } = require('../.test-build/account-context.js');
+  await runWithAccount({ userId: 'calendar-owner', database: {} }, async () => {
   await calendar.saveStoredTokens({ refresh_token: 'refresh', access_token: 'access', expires_at: Date.now() + 3600000 });
   assert.equal((await calendar.getStoredTokens()).refresh_token, 'refresh');
+  assert.equal(await runWithAccount({ userId: 'another-owner', database: {} }, () => calendar.getStoredTokens()), null);
   assert.equal(jar.get('august_calendar').options.httpOnly, true);
   assert.equal(jar.get('august_calendar').options.sameSite, 'lax');
   const payloads = [];
@@ -52,4 +55,5 @@ test('cookie token storage and deterministic Calendar IDs work without filesyste
   assert.match(payloads[0].id, /^[a-f0-9]{64}$/); assert.equal(payloads[0].id, payloads[1].id);
   await calendar.clearStoredTokens();
   assert.equal(await calendar.isCalendarConnected(), false);
+  });
 });

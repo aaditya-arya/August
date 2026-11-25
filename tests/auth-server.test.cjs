@@ -1,0 +1,33 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+
+test('account middleware verifies identity, rejects incomplete RLS, and scopes successful handlers', async t => {
+  let user = null, storageVersion = 1, rpcCalls = 0;
+  const verifiedTokens = [];
+  const database = { auth: { getUser: async token => { verifiedTokens.push(token); return { data: { user }, error: null }; } }, rpc: async () => { rpcCalls++; return { data: storageVersion, error: null }; } };
+  const modulePaths = ['@supabase/ssr', '@supabase/supabase-js', 'next/headers'].map(require.resolve);
+  const previous = modulePaths.map(path => require.cache[path]);
+  modulePaths.forEach((path, i) => { require.cache[path] = { id: path, filename: path, loaded: true, exports: [{ createServerClient: () => database }, { createClient: () => database }, { cookies: async () => ({ getAll: () => [], set: () => undefined }) }][i] }; });
+  t.after(() => modulePaths.forEach((path, i) => { if (previous[i]) require.cache[path] = previous[i]; else delete require.cache[path]; }));
+  const { withAccount } = require('../.test-build/auth-server.js');
+  const { currentAccount } = require('../.test-build/account-context.js');
+  const guarded = withAccount(async () => Response.json({ owner: currentAccount().userId }));
+  const request = (headers = {}, method = 'GET') => new Request('https://august.example/api/notes', { headers, method });
+  assert.equal((await guarded(request())).status, 401);
+  assert.equal(rpcCalls, 0);
+  user = { id: 'verified-owner' };
+  assert.equal((await guarded(request({ authorization: 'invalid scheme' }))).status, 401);
+  storageVersion = 0;
+  const incomplete = await guarded(request({ authorization: 'Bearer verified-token' }));
+  assert.equal(incomplete.status, 503);
+  assert.equal((await incomplete.json()).code, 'ACCOUNT_SETUP_REQUIRED');
+  storageVersion = 1;
+  const success = await guarded(request({ authorization: 'Bearer verified-token' }));
+  assert.deepEqual(await success.json(), { owner: 'verified-owner' });
+  assert.equal(success.headers.get('cache-control'), 'private, no-store');
+  assert.ok(verifiedTokens.includes('verified-token'));
+  assert.equal((await guarded(request({ origin: 'https://untrusted.example' }, 'POST'))).status, 403);
+  assert.equal((await guarded(request({ origin: 'https://august.example' }, 'POST'))).status, 200);
+  database.rpc = async () => { throw new Error('network unavailable'); };
+  assert.equal((await guarded(request())).status, 503);
+});

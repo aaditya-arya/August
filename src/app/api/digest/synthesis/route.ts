@@ -1,10 +1,11 @@
+import { withAccount } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { buildSundayReview } from "@/lib/review-service";
 import { errorMessage } from "@/lib/errors";
 import { validTimezone } from "@/lib/time";
 
 export const maxDuration = 300;
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const days = params.get("days") || "7";
@@ -13,3 +14,5 @@ export async function GET(request: Request) {
     return NextResponse.json(await buildSundayReview(days, timezone, params.get("refresh") === "1"));
   } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
+
+export const GET = withAccount(handleGET);

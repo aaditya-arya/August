@@ -6,6 +6,7 @@ export type Moment = {
   memory?: { title: string } | null;
 };
 export type ItemsResponse = { items: Moment[] };
+export type AuthConfig = { supabaseUrl: string; supabaseAnonKey: string; googleEnabled: boolean };
 export type NoteSubmission = { content: string; key: string; currentTime: string; timezone: string };
 export type SaveNoteResponse = { success: boolean; noteId: string; extractedCount: number; items: Moment[] };
 export type Insight = { title: string; meaning: string; takeaway: string; source_ids: string[] };
@@ -32,7 +33,7 @@ export function normalizeServerUrl(value: string, allowInsecure = false) {
   return parsed.origin;
 }
 
-export function createAugustApi(baseUrl = "", fetcher: typeof fetch = fetch) {
+export function createAugustApi(baseUrl = "", fetcher: typeof fetch = fetch, auth?: { accessToken: () => Promise<string | null> }) {
   const origin = baseUrl.replace(/\/$/, "");
   async function request<T>(path: string, options: RequestInit = {}, timeout = 300_000): Promise<T> {
     const controller = new AbortController();
@@ -41,7 +42,15 @@ export function createAugustApi(baseUrl = "", fetcher: typeof fetch = fetch) {
     options.signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(abort, timeout);
     try {
-      const response = await fetcher(`${origin}${path}`, { ...options, signal: controller.signal });
+      let headers = options.headers;
+      if (auth) {
+        const token = await auth.accessToken();
+        if (!token) throw new Error('Sign in to access your journal.');
+        const authenticated = new Headers(headers);
+        authenticated.set('Authorization', `Bearer ${token}`);
+        headers = authenticated;
+      }
+      const response = await fetcher(`${origin}${path}`, { ...options, headers, signal: controller.signal });
       let body: unknown;
       try { body = await response.json(); }
       catch { throw new Error("The server returned an unreadable response. Please try again."); }
@@ -59,6 +68,7 @@ export function createAugustApi(baseUrl = "", fetcher: typeof fetch = fetch) {
     }
   }
   return {
+    authConfig: () => request<AuthConfig>('/api/auth/config', {}, 15_000),
     items: (period: Period = "7", signal?: AbortSignal) => request<ItemsResponse>(`/api/items?days=${period}`, { signal }, 30_000),
     saveNote: ({ key, ...body }: NoteSubmission) => request<SaveNoteResponse>("/api/notes", {
       method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(body),

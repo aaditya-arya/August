@@ -1,3 +1,4 @@
+import { withAccount } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { parseIntentionState, yearHorizon } from "@/lib/intention-state";
@@ -7,7 +8,7 @@ import { invalidateReviewData, readReviewEntries } from "@/lib/review-data";
 import { validTimezone } from "@/lib/time";
 import { errorMessage } from "@/lib/errors";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const zone = validTimezone(new URL(request.url).searchParams.get("timezone")) || "UTC";
     const entries = await readReviewEntries();
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   try {
     const body = await request.json();
     if (typeof body.item_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.item_id)) return NextResponse.json({ error: "A valid entry is required." }, { status: 400 });
@@ -37,3 +38,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "This plan changed while you were editing. Please try again." }, { status: 409 });
   } catch (error) { return NextResponse.json({ error: errorMessage(error) }, { status: 500 }); }
 }
+
+export const GET = withAccount(handleGET);
+export const PATCH = withAccount(handlePATCH);

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import { Link } from 'expo-router';
-import { Button, Card, Heading, Notice, Screen } from '../components/ui';
-import { useJournal } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { Button, Card, Heading, Notice, Screen } from '../../components/ui';
+import { useJournal } from '../../lib/journal';
+import { useTheme } from '../../lib/theme';
 
 export default function SettingsScreen() {
   const c = useTheme();
-  const { server, setServer, ready } = useJournal();
+  const { server, setServer, ready, user, signOut } = useJournal();
   const [input, setInput] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   }
   return <Screen>
     <Heading eyebrow="Make yourself at home" title="Your August" subtitle="One journal, wherever you are." />
+    <Card><Text style={{ color: c.text, fontFamily: 'serif', fontSize: 23 }}>Your account</Text><Text selectable style={{ color: c.muted }}>{user?.email}</Text><Button label="Sign out on this device" disabled={busy} quiet onPress={() => { setBusy(true); void signOut().catch(e => setMessage(e instanceof Error ? e.message : 'Sign-out failed.')).finally(() => setBusy(false)); }} /></Card>
     <Card>
       <Text style={{ color: c.text, fontFamily: 'serif', fontSize: 23 }}>Connect your journal</Text>
       <Text style={{ color: c.muted, lineHeight: 23 }}>Use the address of your August server. Your saved moments will be available on both devices.</Text>

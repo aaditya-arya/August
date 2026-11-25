@@ -1,3 +1,4 @@
+import { withAccount } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { ingestNote } from "@/lib/ingestion";
@@ -7,7 +8,7 @@ import type { SaveNoteResponse } from "@august/shared";
 
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const { content, currentTime, timezone } = await request.json();
     if (typeof content !== "string" || !content.trim()) return NextResponse.json({ error: "Content is required" }, { status: 400 });
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
   if (id) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "A valid note is required." }, { status: 400 });
@@ -32,3 +33,6 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.from("notes").select("*").order("created_at", { ascending: false });
   return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ notes: data || [] });
 }
+
+export const POST = withAccount(handlePOST);
+export const GET = withAccount(handleGET);

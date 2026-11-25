@@ -7,6 +7,7 @@ type Snapshot = { intentions: ReviewIntention[]; loading: boolean; error: string
 const initial: Snapshot = { intentions: [], loading: true, error: null };
 let snapshot = initial;
 let pending: Promise<void> | null = null;
+let generation = 0;
 const listeners = new Set<() => void>();
 function emit(value: Snapshot) { snapshot = value; for (const listener of listeners) listener(); }
 function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
@@ -15,17 +16,20 @@ const serverSnapshot = () => initial;
 
 export async function refreshIntentions() {
   if (pending) return pending;
+  const started = generation;
   pending = (async () => {
     try {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await fetch(`/api/intentions?timezone=${encodeURIComponent(zone)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load your plans.");
-      emit({ intentions: data.intentions || [], loading: false, error: null });
-    } catch (error) { emit({ ...snapshot, loading: false, error: error instanceof Error ? error.message : "Could not load your plans." }); }
+      if (started === generation) emit({ intentions: data.intentions || [], loading: false, error: null });
+    } catch (error) { if (started === generation) emit({ ...snapshot, loading: false, error: error instanceof Error ? error.message : "Could not load your plans." }); }
   })();
-  try { await pending; } finally { pending = null; }
+  try { await pending; } finally { if (started === generation) pending = null; }
 }
+
+export function resetIntentions() { generation++; pending = null; emit(initial); }
 
 export function useIntentions() {
   const value = useSyncExternalStore(subscribe, getSnapshot, serverSnapshot);

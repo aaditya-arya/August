@@ -2,9 +2,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { createAugustApi } from '@august/shared';
-import { Card, Heading, Loading, Notice, Screen, s } from '../components/ui';
-import { useRemote } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { Card, Heading, Loading, Notice, Screen, s } from '../../components/ui';
+import { useRemote } from '../../lib/journal';
+import { useTheme } from '../../lib/theme';
 
 export default function GraphScreen() {
   const c = useTheme();

@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { BackHandler, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from 'expo-router';
 import { createDraftPersistence, writingModes, type DraftSnapshot } from '@august/shared';
-import { Button, Card, Heading, Loading, Notice, Screen, s } from '../components/ui';
-import { useJournal } from '../lib/journal';
-import { useTheme } from '../lib/theme';
+import { Button, Card, Heading, Loading, Notice, Screen, s } from '../../components/ui';
+import { useJournal } from '../../lib/journal';
+import { useTheme } from '../../lib/theme';
+import { accountDraft } from '../../lib/secure-storage';
 
-const persistence = createDraftPersistence(AsyncStorage, 'august-native-draft-v1');
+const legacyPersistence = createDraftPersistence(AsyncStorage, 'august-native-draft-v1');
 
 export default function WriteScreen() {
   const c = useTheme();
-  const { api, changed } = useJournal();
+  const { api, changed, namespace, user } = useJournal();
+  const userId = user!.id;
+  const persistence = useMemo(() => accountDraft(namespace, userId), [namespace, userId]);
+  const mounted = useRef(false);
+  const [legacy, setLegacy] = useState('');
   const navigation = useNavigation();
   const [content, setContent] = useState('');
   const [ready, setReady] = useState(false);
@@ -33,14 +38,16 @@ export default function WriteScreen() {
 
   useEffect(() => {
     let active = true;
+    mounted.current = true;
+    void legacyPersistence.read().then(draft => { if (active) setLegacy(draft.content); }).catch(() => undefined);
     persistence.read().then(draft => {
       if (!active) return;
       snapshot.current = draft;
       setContent(draft.content);
       setReady(true);
     }).catch(() => { if (active) setError('Your saved draft could not be restored. Reopen August to retry; it has not been overwritten.'); });
-    return () => { active = false; };
-  }, []);
+    return () => { active = false; mounted.current = false; };
+  }, [persistence]);
   useEffect(() => {
     if (!focus) return;
     navigation.setOptions({ tabBarStyle: { display: 'none' } });
@@ -73,6 +80,7 @@ export default function WriteScreen() {
       await persistence.write(snapshot.current);
       await api.saveNote(submission);
       savedOnline = true;
+      if (!mounted.current) return;
       if (snapshot.current.content === text) { snapshot.current.content = ''; setContent(''); }
       snapshot.current.pending = null;
       changed();
@@ -83,6 +91,19 @@ export default function WriteScreen() {
     } catch (e) {
       setError(savedOnline ? 'Your moment was saved, but the local draft could not be updated.' : `${e instanceof Error ? e.message : 'Saving failed.'} Your writing is still here.`);
     } finally { savingRef.current = false; setSaving(false); }
+  }
+
+  async function recoverDraft() {
+    if (!ready || savingRef.current) return;
+    savingRef.current = true; setSaving(true);
+    const next = { ...snapshot.current, content: `${snapshot.current.content}${snapshot.current.content ? '\n\n' : ''}${legacy}` };
+    try {
+      snapshot.current = next; setContent(next.content);
+      await persistence.write(next);
+      await AsyncStorage.removeItem('august-native-draft-v1');
+      setLegacy(''); setStatus('Your earlier draft is now on this account’s page. Save it when you are ready.');
+    } catch { setError('The earlier draft could not be recovered. It has been preserved.'); }
+    finally { savingRef.current = false; setSaving(false); }
   }
 
   return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -103,6 +124,7 @@ export default function WriteScreen() {
         <View style={[s.row, { justifyContent: 'space-between' }]}><Text style={{ color: c.muted, fontSize: 11 }}>{wordCount} {wordCount === 1 ? 'word' : 'words'}</Text><Text style={{ color: c.muted, fontSize: 11 }}>{content ? persisted ? 'Draft kept on this device' : 'Draft not yet stored' : 'Every beginning counts'}</Text></View>
         <Button label={saving ? 'Saving your moment…' : 'Save moment  ↗'} disabled={!ready || !content.trim() || saving} onPress={() => void save()} />
       </Card>
+      {!!legacy && <Card><Text style={{ color: c.muted, lineHeight: 23 }}>There is a draft from before sign-in on this device. Add it to this account’s page if it belongs to you.</Text><Button label="Recover earlier draft" disabled={!ready || saving} onPress={() => void recoverDraft()} quiet /></Card>}
       {error && <Notice message={error} />}
       {!!status && <Text accessibilityLiveRegion="polite" style={{ color: c.accent, marginBottom: 18 }}>{status}</Text>}
       {!focus && <Card style={{ backgroundColor: c.wash }}>

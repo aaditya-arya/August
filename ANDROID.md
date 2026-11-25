@@ -84,7 +84,7 @@ npx eas-cli@latest update --channel production --environment production --messag
 npx eas-cli@latest build --platform android --profile production
 ```
 
-The current backend has no application sign-in or per-user ownership boundary. Keep development private. Account authentication, ownership checks/RLS, and native session handling must be implemented before exposing personal journals as a public multi-user service. Google Calendar authorization is not application sign-in.
+The clients now implement Google account sign-in, verified server sessions, and account-scoped data access. Complete the [manual Supabase setup](AUTH_SETUP.md) before using live accounts. The database migration and Google provider configuration must be installed in the dashboard; the public app key cannot do that. Google Calendar authorization remains separate from application sign-in.
 
 ## Checks
 
@@ -100,6 +100,22 @@ npx expo-doctor
 
 `export:android` builds the Android JavaScript/Hermes bundle. It is not an APK/AAB, signing check, or device test.
 
+### EAS fails during “Install dependencies”
+
+The November 12 preview builds failed with `npm ci` reporting missing `@emnapi/core` / `@emnapi/wasi-threads` entries. The Windows-generated lockfile omitted dependencies of Tailwind's optional WASM package and a required peer of the shared native WASM runtime. The fix records the bundled dependencies and explicitly pins `@emnapi/core` as a root build dependency, which also locks its required threads package. Application package versions are unchanged. `tests/lockfile.test.cjs` checks dependency completeness and platform runtime peers so these omissions are caught before another upload.
+
+Keep the root lockfile in Git. Run installation commands from the repository root; EAS detects the mobile workspace and runs its clean installation there as well. The preview command works from either the repository root or `apps/mobile`:
+
+```powershell
+npm run build:android:preview
+```
+
+Login, project initialization, update configuration, and keystore generation do not need to be repeated. The “No environment variables” message was not the dependency-install failure. The account-enabled preview starts with the connection/sign-in screen; it preserves existing drafts until sign-in and explicit recovery. Account synchronization requires an HTTPS backend address.
+
+The preview script pins the verified EAS CLI 27.7.2. During verification, newly published `eas-cli@27.8.0` failed to install because its `@expo/turtle-spawn@27.8.0` tarball returned npm 404; avoid `@latest` until that upstream publication is complete.
+
+Verified on November 12, 2026: [preview build b4e026ad](https://expo.dev/accounts/aaditya-arya/projects/august-ledger/builds/b4e026ad-8706-491e-a290-dc0b806203ab) finished successfully and generated a signed APK. All 74 local tests, mobile type-checking, and mobile lint passed.
+
 ## Supabase diagnostics
 
 ```powershell
@@ -107,7 +123,7 @@ npm run check:supabase
 npm run check:supabase -- --realtime
 ```
 
-The script checks required table columns using HEAD requests. It does not print keys, fetch journal contents, or write database rows. The optional Realtime test opens a temporary channel and disconnects without sending messages.
+The script checks that anonymous table access is denied using HEAD requests and verifies that Google sign-in is enabled. It does not print keys, fetch journal contents, or write database rows. The optional Realtime test opens a temporary channel and disconnects without sending messages. This is a configuration check, not a complete cross-account audit.
 
 On November 12, 2026, all required tables returned HTTP 200, the app's items/graph/intentions endpoints returned HTTP 200, and Realtime returned `SUBSCRIBED`. The screenshot's `Database supervisor not found for tenant` warning was not reproduced. Its original cause remains unconfirmed without project logs. The application does not currently subscribe to Realtime; do not change SQL tables or RLS to try to repair a Realtime service warning.
 

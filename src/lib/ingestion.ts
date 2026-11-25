@@ -5,8 +5,9 @@ import { createIngestor, type StoredItem } from "./ingestion-core";
 import { extractItems, generateEmbedding } from "./gemini";
 import { computeAndStoreGraphEdges } from "./graph";
 import { autoCreateGoogleCalendarEvent } from "./calendar-server";
+import { currentAccount } from './account-context';
 
-export const ingestNote = createIngestor({
+const ingest = createIngestor({
   async findNote(id) {
     const { data, error } = await supabase.from("notes").select("id, content, extracted_items(*)").eq("id", id).maybeSingle();
     if (error) throw error;
@@ -38,4 +39,8 @@ export const ingestNote = createIngestor({
     refreshCategories: () => loadCategoryCatalogue(true), onCategoriesReviewed: rememberCategoryCatalogue }),
   embed: generateEmbedding, connectGraph: computeAndStoreGraphEdges,
   createCalendarEvent: autoCreateGoogleCalendarEvent,
+});
+
+export const ingestNote: typeof ingest = (content, options) => ingest(content, {
+  ...options, namespace: `${currentAccount().userId}:${options.namespace || 'ledger'}`,
 });

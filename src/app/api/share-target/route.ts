@@ -1,3 +1,4 @@
+import { withAccount } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { ingestNote } from "@/lib/ingestion";
 import { errorMessage } from "@/lib/errors";
@@ -7,7 +8,7 @@ import { shareBridge } from "@/lib/share-bridge";
 export const maxDuration = 300;
 const string = (value: unknown) => typeof value === "string" ? value : "";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const json = (request.headers.get("content-type") || "").includes("application/json");
   try {
     const body = json ? await request.json() : Object.fromEntries(await request.formData());
@@ -26,8 +27,14 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const params = new URL(request.url).searchParams;
   const payload = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
   return Object.values(payload).some(Boolean) ? shareBridge(payload) : NextResponse.json({ error: "Shared content is required." }, { status: 400 });
 }
+
+const saveAuthenticated = withAccount(handlePOST);
+export const POST = (request: Request) => (request.headers.get('content-type') || '').includes('application/json') ? saveAuthenticated(request) : handlePOST(request);
+// Rendering incoming text does not read or write a journal. The bridge's save
+// request is authenticated separately, so signing in never discards a share.
+export const GET = handleGET;
