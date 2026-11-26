@@ -73,6 +73,8 @@ For the public deployment, use `https://august-topaz.vercel.app` in Android's co
 
 Redeploy Production after changing its variables, and ensure the deployment includes the latest code, not an older main commit or a protected preview URL. If optional `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, or `GEMINI_REVIEW_MODEL` variables are present, they override the defaults; use the values in `.env.example` for the tested Lite preferences. Public Supabase URL/key are the only Supabase settings exposed to clients; AI keys and Calendar secrets stay on the server.
 
+Production-scoped Vercel variables are not automatically available to Preview deployments. A preview without public Supabase configuration can build and offer the Android download, but its sign-in stays unavailable. Add the appropriate variables to Preview and redeploy if you need to test authenticated web features there.
+
 Install the latest website APK as an update to August Dev. In Settings, check the version and **Server status**, then save a small test moment, open Review for All time, and open Connections. Review generation can fall back to a different model when Gemini is overloaded; if all models fail, original moments remain readable. Repeat the account-isolation check above on the phone. These authenticated device checks still need to be performed by the account holder.
 
 ## 5. Recover earlier progress deliberately

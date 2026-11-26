@@ -15,14 +15,15 @@ export function useAccount() {
 }
 
 export function AuthBoundary({ children }: { children: ReactNode }) {
+  const client = browserAuthClient();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(client !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(client ? null : false);
   const accountId = useRef<string | null>(null);
-  const client = browserAuthClient();
   useEffect(() => {
+    if (!client) return;
     let active = true;
     const change = (next: User | null) => {
       if (!active) return;
@@ -40,11 +41,13 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
   }, [client]);
 
   async function signIn() {
+    if (!client) return;
     setBusy(true); setError(null);
     const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/auth/callback`, queryParams: { prompt: 'select_account' } } });
     if (error) { setError('Google sign-in could not start. Please try again once account setup is complete.'); setBusy(false); }
   }
   async function signOut() {
+    if (!client) return;
     setBusy(true);
     const { error } = await client.auth.signOut({ scope: 'local' });
     if (error) { setError('Sign-out failed. Please try again.'); setBusy(false); return; }
