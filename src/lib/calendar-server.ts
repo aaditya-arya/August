@@ -40,19 +40,22 @@ export async function isCalendarConnected(): Promise<boolean> {
   return Boolean(tokens?.refresh_token || (tokens?.access_token && (tokens.expires_at || 0) > Date.now()));
 }
 
-function redirectUri() { return `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/google/callback`; }
+function redirectUri(origin?: string) {
+  const base = (origin || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  return `${base}/api/auth/google/callback`;
+}
 
-export function getGoogleAuthUrl(state: string): string {
-  if (!process.env.GOOGLE_CLIENT_ID || !secret() || !state) throw new Error("Google Calendar OAuth is not configured.");
-  const params = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: redirectUri(), response_type: "code", scope: "https://www.googleapis.com/auth/calendar.events", access_type: "offline", prompt: "consent", state });
+export function getGoogleAuthUrl(state: string, origin?: string): string {
+  if (!process.env.GOOGLE_CLIENT_ID || !secret() || !state) throw new Error("Google Calendar OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your server environment.");
+  const params = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: redirectUri(origin), response_type: "code", scope: "https://www.googleapis.com/auth/calendar.events", access_type: "offline", prompt: "consent", state });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
 type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; token_type?: string; scope?: string; error_description?: string; error?: string };
 
-export async function exchangeCodeForTokens(code: string): Promise<{ success: boolean; error?: string }> {
+export async function exchangeCodeForTokens(code: string, origin?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: process.env.GOOGLE_CLIENT_ID || "", client_secret: process.env.GOOGLE_CLIENT_SECRET || "", redirect_uri: redirectUri(), grant_type: "authorization_code" }), signal: AbortSignal.timeout(10000) });
+    const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: process.env.GOOGLE_CLIENT_ID || "", client_secret: process.env.GOOGLE_CLIENT_SECRET || "", redirect_uri: redirectUri(origin), grant_type: "authorization_code" }), signal: AbortSignal.timeout(10000) });
     const data: TokenResponse = await response.json();
     if (!response.ok || !data.access_token) return { success: false, error: data.error_description || data.error || "Token exchange failed" };
     await saveStoredTokens({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Date.now() + (data.expires_in || 3600) * 1000, token_type: data.token_type, scope: data.scope });

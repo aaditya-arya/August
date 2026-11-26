@@ -12,13 +12,13 @@ async function handleGET(request: Request) {
   const valid = matchesOAuthState(params.get("state"), expected) && jar.get("august_oauth_user")?.value === currentAccount().userId;
   jar.set("august_oauth_user", "", { path: "/api/auth/google/callback", maxAge: 0 });
   jar.set("august_oauth_state", "", { path: "/api/auth/google/callback", maxAge: 0 });
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const base = new URL(request.url).origin;
   const redirectError = (reason: string) => NextResponse.redirect(`${base}/?calendar=error&reason=${encodeURIComponent(reason)}`);
   if (!valid) return redirectError("invalid_state");
   if (params.get("error")) return redirectError(params.get("error")!);
   const code = params.get("code");
   if (!code) return redirectError("no_code");
-  const result = await exchangeCodeForTokens(code);
+  const result = await exchangeCodeForTokens(code, base);
   if (!result.success) return redirectError(result.error || "exchange_failed");
   return NextResponse.redirect(`${base}/?calendar=connected`);
 }

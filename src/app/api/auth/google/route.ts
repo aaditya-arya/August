@@ -5,10 +5,10 @@ import { getGoogleAuthUrl } from "@/lib/calendar-server";
 import { errorMessage } from "@/lib/errors";
 import { currentAccount } from "@/lib/account-context";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   try {
     const state = randomBytes(32).toString("base64url");
-    const response = NextResponse.redirect(getGoogleAuthUrl(state));
+    const response = NextResponse.redirect(getGoogleAuthUrl(state, new URL(request.url).origin));
     response.cookies.set("august_oauth_state", state, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/google/callback", maxAge: 600 });
     response.cookies.set("august_oauth_user", currentAccount().userId, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/auth/google/callback", maxAge: 600 });
     return response;
