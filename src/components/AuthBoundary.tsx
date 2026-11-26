@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import { Cloud, Feather, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import { browserAuthClient } from '@/lib/auth-browser';
 import { resetIntentions } from '@/lib/use-intentions';
+import { resetTasks } from '@/lib/use-tasks';
 import { AndroidDownload } from './AndroidDownload';
 
 const Context = createContext<User | null>(null);
@@ -30,6 +31,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
       if (accountId.current !== (next?.id || null)) {
         accountId.current = next?.id || null;
         resetIntentions();
+        resetTasks();
         window.dispatchEvent(new Event('august-account-changed'));
       }
       setUser(next); setLoading(false);
@@ -75,7 +77,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
   </main>;
   return <Context.Provider value={user}><div key={user.id} className="contents">
     {children}
-    <div className="fixed bottom-3 right-3 z-40 flex max-w-[min(90vw,320px)] items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 shadow-sm">
+    <div className="mx-5 mb-4 flex max-w-[min(90vw,320px)] self-end items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 shadow-sm md:fixed md:bottom-3 md:right-3 md:z-40 md:m-0">
       <span className="truncate text-[10px] text-muted">{user.email}</span>
       <button type="button" aria-label="Sign out" disabled={busy} onClick={() => void signOut()} className="rounded-full p-1.5 text-muted hover:text-accent"><LogOut size={14} /></button>
     </div>

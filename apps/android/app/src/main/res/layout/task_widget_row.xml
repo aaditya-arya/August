@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="56dp" android:orientation="horizontal" android:gravity="center_vertical">
+    <ImageButton android:id="@+id/widget_task_check" android:layout_width="48dp" android:layout_height="48dp" android:src="@drawable/ic_task_circle" android:background="@android:color/transparent" android:contentDescription="Complete task" android:padding="12dp" />
+    <LinearLayout android:id="@+id/widget_task_text" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center_vertical">
+        <TextView android:id="@+id/widget_task_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/task_widget_text" android:textStyle="bold" android:textSize="13sp" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/widget_task_due" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/task_widget_secondary" android:textSize="11sp" android:maxLines="1" android:paddingTop="3dp" />
+    </LinearLayout>
+</LinearLayout>

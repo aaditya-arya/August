@@ -23,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -37,13 +38,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.august.nativejournal.Destination
 import app.august.nativejournal.JournalViewModel
 import app.august.nativejournal.data.Moment
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,9 +53,17 @@ fun AugustApp(model: JournalViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val completionHaptics = LocalHapticFeedback.current
     var selectedMoment by remember { mutableStateOf<Moment?>(null) }
     LaunchedEffect(state.device.accountKeyForUi(), state.preview) { selectedMoment = null }
     LaunchedEffect(state.message) { state.message?.let { snackbar.showSnackbar(it); model.consumeMessage() } }
+    LaunchedEffect(state.completedTask) {
+        state.completedTask?.let { task ->
+            completionHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (snackbar.showSnackbar("One more thing, done.", actionLabel = "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) model.completeTask(task, false)
+            model.clearTaskNotice()
+        }
+    }
     AugustTheme(state.device.appearance) {
         Surface(Modifier.fillMaxSize()) {
             when {
@@ -64,24 +74,29 @@ fun AugustApp(model: JournalViewModel) {
                     preview = model::preview,
                 )
                 else -> {
-                    val mainTabs = remember { listOf(Destination.Moments, Destination.Review, Destination.Graph, Destination.Settings) }
+                    val mainTabs = remember { listOf(Destination.Moments, Destination.Tasks, Destination.Review, Destination.Graph, Destination.Settings) }
                     val pagerState = rememberPagerState(
                         initialPage = mainTabs.indexOf(state.destination).coerceAtLeast(0),
                         pageCount = { mainTabs.size },
                     )
                     val haptics = LocalHapticFeedback.current
                     val currentDestination by rememberUpdatedState(state.destination)
+                    val dragging by pagerState.interactionSource.collectIsDraggedAsState()
+                    var userSwipe by remember { mutableStateOf(false) }
+                    LaunchedEffect(dragging) { if (dragging) userSwipe = true }
                     LaunchedEffect(state.destination) {
+                        userSwipe = false
                         val target = mainTabs.indexOf(state.destination)
                         if (target >= 0 && target != pagerState.currentPage) {
                             pagerState.animateScrollToPage(target, animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
                         }
                     }
                     LaunchedEffect(pagerState) {
-                        snapshotFlow { pagerState.settledPage }.drop(1).distinctUntilChanged().collect { page ->
-                            val destination = mainTabs[page]
-                            if (currentDestination != Destination.Write && currentDestination != destination) {
-                                model.navigate(destination)
+                        snapshotFlow { Triple(pagerState.settledPage, pagerState.isScrollInProgress, userSwipe) }.distinctUntilChanged().collect { (page, moving, swiped) ->
+                            if (swiped && !moving) {
+                                userSwipe = false
+                                val destination = mainTabs[page]
+                                if (currentDestination != Destination.Write && currentDestination != destination) model.navigate(destination)
                             }
                         }
                     }
@@ -98,6 +113,7 @@ fun AugustApp(model: JournalViewModel) {
                                         Text(when (destination) {
                                             Destination.Moments -> "August"
                                             Destination.Write -> "New moment"
+                                            Destination.Tasks -> "Tasks"
                                             Destination.Review -> "Your review"
                                             Destination.Graph -> "Connections"
                                             Destination.Settings -> "Settings"
@@ -143,8 +159,9 @@ fun AugustApp(model: JournalViewModel) {
                                 NavigationBar {
                                     val tabs = listOf(
                                         Triple(Destination.Moments, "Journal", Icons.AutoMirrored.Filled.List),
+                                        Triple(Destination.Tasks, "Tasks", Icons.Default.Check),
                                         Triple(Destination.Review, "Review", Icons.Default.DateRange),
-                                        Triple(Destination.Graph, "Connections", Icons.Default.Share),
+                                        Triple(Destination.Graph, "Graph", Icons.Default.Share),
                                         Triple(Destination.Settings, "Settings", Icons.Default.Person),
                                     )
                                     tabs.forEach { (destination, label, icon) ->
@@ -177,7 +194,7 @@ fun AugustApp(model: JournalViewModel) {
                                 ExtendedFloatingActionButton(
                                     onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.navigate(Destination.Write) },
                                     interactionSource = fabInteraction,
-                                    modifier = Modifier.pressScale(fabInteraction, targetScale = 0.94f),
+                                    modifier = Modifier.pressScale(fabInteraction, targetScale = 0.94f).semantics { contentDescription = "Write a moment" },
                                     icon = { Icon(Icons.Default.Edit, null) },
                                     text = { Text("Write a moment") },
                                 )
@@ -193,13 +210,15 @@ fun AugustApp(model: JournalViewModel) {
                                 HorizontalPager(
                                     state = pagerState,
                                     beyondViewportPageCount = 1,
-                                    userScrollEnabled = state.destination != Destination.Write && pagerState.currentPage != 2,
+                                    userScrollEnabled = state.destination != Destination.Write && mainTabs[pagerState.currentPage] != Destination.Graph,
                                     modifier = Modifier.fillMaxSize(),
                                 ) { page ->
                                     when (mainTabs[page]) {
                                         Destination.Moments -> MomentsScreen(state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
                                             retry = model::refreshMoments, navigate = model::navigate)
                                         Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
+                                        Destination.Tasks -> TasksScreen(state, refresh = model::refreshTasks, complete = model::completeTask, edit = model::editTask,
+                                            write = { model.navigate(Destination.Write) }, reminders = model::taskReminders)
                                         Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
                                         Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
                                         Destination.Write -> Unit

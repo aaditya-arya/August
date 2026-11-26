@@ -30,6 +30,14 @@ There is no need to copy `node_modules`, `.next`, or generated Android/iOS folde
 
 For the new native Material 3 application, open `apps/android` in Android Studio or follow [its build and setup guide](apps/android/README.md). It builds an installable APK using Gradle and uses the existing authenticated backend.
 
+## Tasks
+
+The checkmark tab on the website and Android keeps work mentioned in journal notes. “I want to create a website” and “I'm working on a product” become tasks even without dates; passing ideas, purchase wishes, cancellations, and already finished work are excluded. Explicit deadlines use the writer's timezone. Both clients offer grid/list views, deadline editing, completed filters, and completion with Undo. Completion is shared with Sunday Review through the existing account-owned entry metadata.
+
+Android 0.4.0 adds an **August Tasks** home-screen widget with quick completion and encrypted cached task data. In Tasks, expand **Reminders & widget** to enable notifications or pin the widget. Dated open tasks get reminders one day and one hour before their deadlines. A task created less than an hour before its deadline gets a reminder at the deadline instead. Undated and completed tasks do not schedule notifications. Android WorkManager persists scheduling across app restarts and reboot, with delivery subject to Android battery restrictions. Background sync runs approximately every 15 minutes when connected; opening Tasks or using widget refresh requests a fresh read.
+
+Tasks reuse the account-protected `extracted_items` metadata. Deploy the updated backend and install the latest APK together. Google Calendar remains a separate integration: marking a task complete cancels Android reminders and prevents new Calendar events on note retries, but does not delete an existing Google Calendar event.
+
 The website's **Download for Android** button serves the packaged preview APK directly. To update that download after building a new APK, run `npm run package:android` and commit `public/downloads` with the release metadata.
 
 For a phone on the same Wi-Fi, run `npm run dev:lan` and enter the printed Wi-Fi address in the app. Tap **Check connection**, then **Continue with Google**. See [ANDROID.md](ANDROID.md) for firewall setup, native builds, and connection troubleshooting. Root server credentials must never be copied into the Android client.

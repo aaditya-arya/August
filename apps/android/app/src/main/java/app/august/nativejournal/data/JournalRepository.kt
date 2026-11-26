@@ -13,6 +13,8 @@ import kotlinx.serialization.SerializationException
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 
 class JournalRepository(private val storage: DeviceStorage, private val http: AugustHttp, private val allowHttp: Boolean) {
     private val mutable = MutableStateFlow(DeviceState())
@@ -20,9 +22,15 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
     private val refreshMutex = Mutex()
     private val authMutex = Mutex()
     private val mutationMutex = Mutex()
+    private val initializationMutex = Mutex()
+    private var initialized = false
+    private val taskRevision = AtomicLong()
+    private val taskWrites = AtomicInteger()
     @Volatile private var generation = 0L
 
-    suspend fun initialize() { mutable.value = storage.read() }
+    suspend fun initialize() = initializationMutex.withLock {
+        if (!initialized) { mutable.value = storage.read(); initialized = true }
+    }
     private suspend fun change(transform: (DeviceState) -> DeviceState) {
         mutationMutex.withLock {
             // Publishing the committed state must finish even if a debounced draft
@@ -171,6 +179,50 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
     }
 
     suspend fun graph(): GraphResponse = ServerJson.decodeFromString(authorized("/api/graph"))
+    suspend fun tasks(): List<JournalTask> {
+        val key = state.value.accountKey() ?: error("Sign in to open your tasks.")
+        val expectedGeneration = generation
+        val revision = taskRevision.get()
+        val tasks = ServerJson.decodeFromString<TasksResponse>(authorized("/api/tasks", mapOf("timezone" to ZoneId.systemDefault().id))).tasks.sortedBy { it.id }
+        checkAccount(key, expectedGeneration)
+        change {
+            check(it.accountKey() == key && generation == expectedGeneration) { "The active account changed. Please try again." }
+            if (revision != taskRevision.get() || taskWrites.get() > 0) it
+            else it.copy(cachedTasks = it.cachedTasks + (key to tasks), taskSyncAt = it.taskSyncAt + (key to Instant.now().epochSecond))
+        }
+        return state.value.cachedTasks[key].orEmpty()
+    }
+
+    suspend fun completeTask(id: String, completed: Boolean): JournalTask = patchTask(id, buildJsonObject { put("completed", completed) })
+    suspend fun editTask(id: String, title: String, dueAt: String?, expectedUpdatedAt: String? = null): JournalTask = patchTask(id, buildJsonObject {
+        put("title", title.trim()); put("due_at", dueAt?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+        expectedUpdatedAt?.let { put("expected_updated_at", it) }
+    })
+    private suspend fun patchTask(id: String, patch: kotlinx.serialization.json.JsonObject): JournalTask {
+        val key = state.value.accountKey() ?: error("Sign in to update a task.")
+        val expectedGeneration = generation
+        taskWrites.incrementAndGet(); taskRevision.incrementAndGet()
+        try {
+            val body = buildJsonObject { put("item_id", id); put("timezone", ZoneId.systemDefault().id); patch.forEach { (name, value) -> put(name, value) } }
+            val task = ServerJson.decodeFromString<TaskMutation>(authorized("/api/tasks", method = "PATCH", body = body.toString())).task
+            checkAccount(key, expectedGeneration)
+            change {
+                check(it.accountKey() == key && generation == expectedGeneration) { "The active account changed. Please try again." }
+                val tasks = (it.cachedTasks[key].orEmpty().filterNot { saved -> saved.id == id } + task).sortedBy { saved -> saved.id }
+                it.copy(cachedTasks = it.cachedTasks + (key to tasks))
+            }
+            return task
+        } finally { taskRevision.incrementAndGet(); taskWrites.decrementAndGet() }
+    }
+    suspend fun taskReminders(enabled: Boolean) { change { it.copy(taskRemindersEnabled = enabled) } }
+    suspend fun claimReminder(account: String, identity: String): Boolean {
+        var claimed = false
+        change {
+            if (it.accountKey() != account || identity in it.deliveredTaskReminders) it
+            else { claimed = true; it.copy(deliveredTaskReminders = (it.deliveredTaskReminders + identity).toList().takeLast(1000).toSet()) }
+        }
+        return claimed
+    }
     suspend fun serverStatus(): ServerStatus = ServerJson.decodeFromString(authorized("/api/health"))
     suspend fun appearance(value: String) { require(value in listOf("system", "light", "dark")); change { it.copy(appearance = value) } }
 
@@ -178,7 +230,7 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
         val before = state.value
         generation++
         // Local sign-out succeeds even offline. Drafts remain encrypted and scoped to their account.
-        change { it.copy(session = null, authAttempt = null, cachedMoments = emptyMap()) }
+        change { it.copy(session = null, authAttempt = null, cachedMoments = emptyMap(), cachedTasks = emptyMap(), taskSyncAt = emptyMap(), deliveredTaskReminders = emptySet()) }
         try {
             before.session?.let { old -> before.connection?.let { connection ->
                 http.request(http.url(connection.config.supabaseUrl, "/auth/v1/logout", mapOf("scope" to "local")),

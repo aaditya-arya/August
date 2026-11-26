@@ -24,6 +24,7 @@ test('manual calendar controls are available for failures but not synced or pend
   assert.equal(shouldOfferCalendarAdd({ ...item, calendar_status: 'failed' }), true);
   assert.equal(shouldOfferCalendarAdd({ ...item, calendar_status: 'none' }), true);
   for (const status of ['synced', 'pending']) assert.equal(shouldOfferCalendarAdd({ ...item, calendar_status: status }), false);
+  assert.equal(shouldOfferCalendarAdd({ ...item, calendar_action: { ...item.calendar_action, review_state: { status: 'completed' } } }), false);
   assert.equal(shouldOfferCalendarAdd({ ...item, google_event_id: 'already-created' }), false);
 });
 

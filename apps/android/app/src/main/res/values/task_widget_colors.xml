@@ -1,0 +1,7 @@
+<resources>
+    <color name="task_widget_surface">#FAF9FD</color>
+    <color name="task_widget_text">#211B61</color>
+    <color name="task_widget_secondary">#625F6D</color>
+    <color name="task_widget_accent">#5855D6</color>
+    <color name="task_widget_outline">#DDD9E5</color>
+</resources>

@@ -59,6 +59,9 @@ Google's authorized redirect URI remains the **Supabase** callback shown in its 
 - Account-scoped writing drafts, stable retry identities, and a disabled editor while saving.
 - Searchable journal with category filters, expandable entries, and Android share-out.
 - Seven-day, thirty-day, and all-time source-backed reviews.
+- A checkmark Tasks tab with two-column grid/list layouts, undated and dated work, editable deadlines, completed filters, confirmation haptics, and Undo. Completions sync to the website and reviews.
+- A resizable **August Tasks** home-screen widget showing open tasks and deadlines, with direct completion and refresh. Add it from Tasks → **Reminders & widget**, or the launcher's widget picker.
+- Optional notification reminders one day and one hour before each deadline; near-term tasks fall back to the deadline itself. WorkManager handles persistence and background sync, and may defer delivery under battery restrictions. Notifications require Android permission. Completed, rescheduled, signed-out, and disabled tasks cancel obsolete reminder jobs.
 - A bounded force-directed connections canvas with pinch zoom, pan, selection, category filters, and an accessible list. At most 120 nodes are drawn at once.
 - Incoming plain-text Android shares that the user can append to their draft before saving.
 - AES-GCM encryption using an Android Keystore key and atomic file replacement for sessions, drafts, and a cache of the latest 200 loaded moments. Device data is excluded from backup.
@@ -66,10 +69,12 @@ Google's authorized redirect URI remains the **Supabase** callback shown in its 
 
 Cached moments can be read offline while the local account session is retained; saving, new reviews, graphs, and authentication need connectivity. Draft persistence is debounced by 300 ms and flushed on activity stop and before saving. This is not background offline synchronization. Sign-out clears sessions and cached entries while retaining the account's encrypted draft.
 
-Native plan editing, Calendar authorization/session handoff, biometric locking, background sync, and notifications remain follow-up work. Do not treat the initial client as feature parity with the web app.
+Detailed financial/goal-plan editing, Calendar authorization/session handoff, biometric locking, and offline note-upload synchronization remain follow-up work. Task sync and deadline notifications are available; saved writing still needs a network connection.
 
 ## Verification
 
 JVM tests cover URL validation, PKCE and callback validation, retry identity, account scoping, graph layout, failed-save recovery, token refresh, server changes, and sign-out. Run `:app:testDebugUnitTest` and `:app:lintDebug` before changes are distributed.
 
 With a device connected, run `:app:connectedDebugAndroidTest` for the preview navigation/editor smoke test. Live validation still requires signing in on a device, saving a moment, restarting the app, checking draft recovery, sharing text into it, and comparing two accounts against a properly configured backend. An APK build or JVM test does not establish that live Google OAuth has been configured.
+
+`TasksIntegrationTest` uses a synthetic on-device HTTP backend to exercise authenticated task loading, completion/Undo, widget check actions, and notification deduplication/cancellation. Run it on a disposable emulator; it skips an existing signed-in account. JVM tests cover reminder times, overdue/undated exclusion, account boundaries, failed completions, and stale task reads. `node tests/live-tasks.cjs` after compiling test sources checks real Gemini work-intent extraction without database writes.

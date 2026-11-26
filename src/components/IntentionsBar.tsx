@@ -19,7 +19,7 @@ export function IntentionsBar() {
     return () => { window.clearInterval(timer); window.removeEventListener("focus", focus); window.removeEventListener("august-ledger-changed", focus); };
   }, []);
   useEffect(() => { void refreshIntentions(); }, [pathname]);
-  if (!clock) return null;
+  if (!clock || pathname === '/tasks') return null;
   const now = new Date(clock), zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const horizon = yearHorizon(now, zone);
   const active = intentions.filter((item) => !item.needs_confirmation && !["completed", "released", "paused"].includes(item.status));

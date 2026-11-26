@@ -27,7 +27,8 @@ export function noteIdForKey(namespace: string, key: string): string {
 export function createIngestor(deps: IngestionDependencies) {
   async function syncCalendar(items: StoredItem[], enabled?: boolean) {
     return (await mapConcurrent(items, 3, async (item) => {
-      if (!enabled || !item.calendar_action?.is_actionable || item.calendar_status === "synced" || Boolean(item.google_event_id)) return null;
+      if (!enabled || !item.calendar_action?.is_actionable || item.calendar_status === "synced" || Boolean(item.google_event_id) ||
+          ['completed', 'paused', 'released'].includes(item.calendar_action.review_state?.status || '')) return null;
       let result: CalendarSync;
       try { result = await deps.createCalendarEvent(item.calendar_action, item.content, item.id); }
       catch (error) { result = { success: false, error: errorMessage(error) }; }

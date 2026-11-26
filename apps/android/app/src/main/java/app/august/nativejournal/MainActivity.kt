@@ -18,7 +18,15 @@ class MainActivity : ComponentActivity() {
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); receive(intent) }
     override fun onStop() { model.flushDraft(); super.onStop() }
+    override fun onResume() {
+        super.onResume()
+        if (model.state.value.device.session != null) {
+            model.refreshTasks()
+            app.august.nativejournal.tasks.TaskRuntime.update(this, model.state.value.device)
+        }
+    }
     private fun receive(intent: Intent?) {
+        if (intent?.getBooleanExtra("open_tasks", false) == true) { model.openTasks(); intent.removeExtra("open_tasks") }
         if (intent?.action == Intent.ACTION_VIEW && intent.data?.scheme == "augustnative") {
             model.authCallback(intent.data.toString())
             intent.data = null

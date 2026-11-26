@@ -92,6 +92,19 @@ data class GraphLink(val source: String, val target: String, val weight: Double,
 data class GraphResponse(val nodes: List<GraphNode> = emptyList(), val links: List<GraphLink> = emptyList())
 
 @Serializable
+data class JournalTask(
+    val id: String, val title: String, val content: String,
+    @SerialName("due_at") val dueAt: String? = null,
+    val completed: Boolean = false,
+    @SerialName("completed_at") val completedAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String,
+    @SerialName("created_at") val createdAt: String,
+    val tags: List<String> = emptyList(),
+)
+@Serializable data class TasksResponse(val tasks: List<JournalTask>)
+@Serializable data class TaskMutation(val task: JournalTask)
+
+@Serializable
 data class ServiceCheck(val ready: Boolean, val message: String)
 @Serializable
 data class ServerStatus(val journal: ServiceCheck, val graph: ServiceCheck, val review: ServiceCheck)
@@ -103,6 +116,10 @@ data class DeviceState(
     val authAttempt: AuthAttempt? = null,
     val drafts: Map<String, Draft> = emptyMap(),
     val cachedMoments: Map<String, List<Moment>> = emptyMap(),
+    val cachedTasks: Map<String, List<JournalTask>> = emptyMap(),
+    val taskSyncAt: Map<String, Long> = emptyMap(),
+    val taskRemindersEnabled: Boolean = true,
+    val deliveredTaskReminders: Set<String> = emptySet(),
     val appearance: String = "system",
 )
 

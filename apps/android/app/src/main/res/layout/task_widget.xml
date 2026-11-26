@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:background="@drawable/task_widget_background">
+    <LinearLayout android:id="@+id/widget_header" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingBottom="10dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="✓  August Tasks" android:textColor="@color/task_widget_text" android:textStyle="bold" android:textSize="18sp" />
+        <TextView android:id="@+id/widget_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/task_widget_secondary" android:textSize="12sp" android:paddingTop="4dp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/widget_tasks" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="vertical" />
+    <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/task_widget_secondary" android:textSize="14sp" android:paddingTop="10dp" android:paddingBottom="10dp" />
+    <TextView android:id="@+id/widget_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="36dp" android:gravity="center_vertical" android:textColor="@color/task_widget_accent" android:textSize="11sp" android:maxLines="2" />
+</LinearLayout>

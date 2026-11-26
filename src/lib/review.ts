@@ -1,5 +1,6 @@
 import { canonicalCategory, type LedgerItem } from "./ledger";
 import { intentionState, localDay, validDay, type IntentionState } from "./intention-state";
+import { taskMetadata } from './task-state';
 
 export type ReviewInsight = { title: string; meaning: string; takeaway: string; source_ids: string[] };
 export type ReviewIntention = {
@@ -137,15 +138,16 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
 
 /** Honest fallback/carry-forward candidates; absence of a log is never asserted as failure. */
 export function directIntentions(entries: LedgerItem[]): ReviewIntention[] {
-  return entries.filter((item) => intentionState(item) || ["Wishlist", "Task", "Reminder"].includes(canonicalCategory(item.category) || "")).map((item) => {
+  return entries.filter((item) => intentionState(item) || taskMetadata(item.calendar_action?.task) || ["Wishlist", "Task", "Reminder"].includes(canonicalCategory(item.category) || "")).map((item) => {
     const state = intentionState(item);
-    const task = ["Task", "Reminder"].includes(canonicalCategory(item.category) || "");
-    return { anchor_id: item.id, title: state?.title || item.memory?.title || item.content, kind: state ? "goal" as const : task ? "task" as const : "wish" as const,
+    const metadata = taskMetadata(item.calendar_action?.task);
+    const task = Boolean(metadata) || ["Task", "Reminder"].includes(canonicalCategory(item.category) || "");
+    return { anchor_id: item.id, title: state?.title || metadata?.title || item.memory?.title || item.content, kind: task ? "task" as const : state ? "goal" as const : "wish" as const,
       status: state ? state.status === "active" ? "open" as const : state.status : "open" as const,
       reflection: state ? "A plan you chose to keep in view." : task ? "You mentioned this action. Is it still relevant?" : "You mentioned wanting this. Is it still something you want to make room for?",
       gap: state ? state.next_step ? "Your next step is saved below." : "Choose one next step." : task ? "Its current outcome is not recorded." : "There is no plan saved for this wish yet.",
       next_step: state?.next_step || "Decide whether to give this a date, keep it as a wish, or let it go.",
-      source_ids: [item.id], deadline: state?.target_date || null, last_movement_at: state?.updated_at || item.event_timestamp, state };
+      source_ids: [item.id], deadline: state?.target_date || metadata?.due_at?.slice(0, 10) || null, last_movement_at: state?.updated_at || item.event_timestamp, state };
   });
 }
 

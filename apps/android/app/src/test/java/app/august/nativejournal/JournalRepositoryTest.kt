@@ -35,6 +35,66 @@ class JournalRepositoryTest {
             Session("old-access", "refresh-token", if (expired) 1 else Instant.now().epochSecond + 3600, user = Account("account-a", "a@example.test")))
     }
 
+    @Test fun tasksStayAccountScopedAndCompletionUsesAnIdempotentDesiredState() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val initial = device(server)
+            val storage = MemoryStorage(initial)
+            val repository = JournalRepository(storage, AugustHttp(), true)
+            repository.initialize()
+            val task = JournalTask("task-a", "Build my website", "I want to create a website.", updatedAt = "2026-11-26T10:00:00Z", createdAt = "2026-11-26T10:00:00Z")
+            server.enqueue(MockResponse().setBody(AugustJson.encodeToString(TasksResponse(listOf(task)))))
+            assertEquals(listOf(task), repository.tasks())
+            assertTrue(server.takeRequest().path!!.startsWith("/api/tasks?timezone="))
+            assertEquals(listOf(task), storage.value.cachedTasks[initial.accountKey()])
+            server.enqueue(MockResponse().setBody(AugustJson.encodeToString(TaskMutation(task.copy(completed = true)))))
+            assertTrue(repository.completeTask(task.id, true).completed)
+            val update = server.takeRequest()
+            assertEquals("PATCH", update.method)
+            assertEquals("Bearer old-access", update.getHeader("Authorization"))
+            assertTrue(update.body.readUtf8().contains("\"completed\":true"))
+            assertTrue(storage.value.cachedTasks[initial.accountKey()]!!.single().completed)
+            server.enqueue(MockResponse().setBody("{}"))
+            repository.signOut()
+            assertTrue(storage.value.cachedTasks.isEmpty())
+        }
+    }
+
+    @Test fun failedTaskCompletionKeepsTheTaskOpenAndReminderClaimsCannotCrossAccounts() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val initial = device(server)
+            val key = initial.accountKey()!!
+            val task = JournalTask("task-a", "Build a website", "My task", updatedAt = "2026-11-26T10:00:00Z", createdAt = "2026-11-26T10:00:00Z")
+            val repository = JournalRepository(MemoryStorage(initial.copy(cachedTasks = mapOf(key to listOf(task)))), AugustHttp(), true)
+            repository.initialize()
+            server.enqueue(MockResponse().setResponseCode(503).setBody("""{"error":"Try again"}"""))
+            try { repository.completeTask(task.id, true); fail("Expected failure") } catch (_: ApiFailure) { }
+            assertFalse(repository.state.value.cachedTasks[key]!!.single().completed)
+            assertFalse(repository.claimReminder("another-account", "same-reminder"))
+            assertTrue(repository.claimReminder(key, "same-reminder"))
+            assertFalse(repository.claimReminder(key, "same-reminder"))
+        }
+    }
+
+    @Test fun aLateTaskListCannotReopenAJustCompletedTask() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val initial = device(server)
+            val key = initial.accountKey()!!
+            val task = JournalTask("task-a", "Build a website", "My task", updatedAt = "2026-11-26T10:00:00Z", createdAt = "2026-11-26T10:00:00Z")
+            val repository = JournalRepository(MemoryStorage(initial.copy(cachedTasks = mapOf(key to listOf(task)))), AugustHttp(), true)
+            repository.initialize()
+            server.enqueue(MockResponse().setBody(AugustJson.encodeToString(TasksResponse(listOf(task)))).setBodyDelay(700, TimeUnit.MILLISECONDS))
+            val stale = async { repository.tasks() }
+            withContext(Dispatchers.IO) { assertNotNull(server.takeRequest(2, TimeUnit.SECONDS)) }
+            server.enqueue(MockResponse().setBody(AugustJson.encodeToString(TaskMutation(task.copy(completed = true)))))
+            repository.completeTask(task.id, true)
+            stale.await()
+            assertTrue(repository.state.value.cachedTasks[key]!!.single().completed)
+        }
+    }
+
     @Test fun journalAndReviewAcceptOlderNullableTagsAndKeepSourceEvidence() = runBlocking {
         MockWebServer().use { server ->
             server.start()

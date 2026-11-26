@@ -23,6 +23,7 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 
 const navItems = [
   { name: "Life Ledger", href: "/", icon: CalendarDays },
+  { name: "Tasks", href: "/tasks", icon: CheckCircle2 },
   { name: "Sunday Review", href: "/digest", icon: BookOpen },
   { name: "Brain Graph", href: "/graph", icon: Network },
   { name: "Clusters & Search", href: "/clusters", icon: Folders },
@@ -205,7 +206,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="grid grid-cols-4 gap-1" aria-label="Main navigation">
+        <nav className="grid grid-cols-5 gap-1" aria-label="Main navigation">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;

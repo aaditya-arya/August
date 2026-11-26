@@ -55,6 +55,11 @@ const itemSchema: Schema = {
       description: "Optional. Do not rewrite the diary; content is reconstructed from source_spans by the server.",
     },
     title: { type: Type.STRING, description: "A short, neutral memory title in the writer's language, including Roman Hindi/Hinglish. No diagnoses, judgements or facts absent from the passage." },
+    task_action: { type: Type.OBJECT, properties: {
+      is_task: { type: Type.BOOLEAN, description: 'True for work the writer intends to do or is doing, including building a product or website, with or without a deadline. False for uncommitted ideas, purchases, completed work, and cancelled plans.' },
+      title: { type: Type.STRING, description: 'A concise task title, at most 140 characters. Empty when is_task=false.' },
+      due_at: { type: Type.STRING, nullable: true, description: 'Explicit deadline as an ISO timestamp with timezone, or null when no deadline was stated. Date-only deadlines use 09:00 in the writer timezone. Never invent a deadline.' },
+    }, required: ['is_task', 'title', 'due_at'] },
     source_spans: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
       block_id: { type: Type.STRING },
       start_quote: { type: Type.STRING, nullable: true, description: "Null for a whole source block. For a partial passage, an exact unique opening quote (roughly 20-60 characters)." },
@@ -97,7 +102,7 @@ const itemSchema: Schema = {
       required: ["is_actionable", "kind"],
     },
   },
-  required: ["category", "category_description", "category_reason", "category_confidence", "title", "source_spans", "tags", "event_timestamp", "calendar_action"],
+  required: ["category", "category_description", "category_reason", "category_confidence", "title", "task_action", "source_spans", "tags", "event_timestamp", "calendar_action"],
 };
 
 const extractionSchema: Schema = {
@@ -115,6 +120,7 @@ const extractionSchema: Schema = {
 export const CLASSIFICATION_RULES = `${TAXONOMY_RULES}
 
 SCHEDULING AND INTENT:
+- Track task_action independently of category and calendar scheduling. "I want to create a website", "I'm working on a new product", "I need to finish the dashboard" are tasks, even without a deadline. Preserve their category meaning, but set task_action.is_task=true with a short title. "What if an app could..." is an uncommitted Idea; "I want to buy a keyboard" is a purchase wish, not a task. Completed work and cancelled plans are not open tasks. A task without an explicit deadline has due_at=null and does not schedule a calendar event. Use the source block's recorded date when interpreting relative deadlines. Recognize equivalent intent in the writer's language, including Hinglish.
 - A pending personal call/contact/follow-up is a Reminder even when phrased as "need to call the bank tomorrow". A concrete payment still owed or action to perform is Task. A planned or past appointment/meeting is Event. Explicit "remind me" requests use Reminder, including inside a mixed paragraph: "Remind me to send the project report tomorrow at 9am" -> Reminder with kind="reminder", not Task.
 - Categories express the person's meaning; calendar_action.kind independently describes scheduling intent (task, reminder, event, or none). A genuine new category such as Medical Appointments can have event intent. Wishes, concepts, dreams, observations and reflections have none.
 - "want to play GTA6", "want to buy a PS6", "wish I had a keyboard", "want to watch Batman", "thinking of learning Spanish" -> Wishlist, not Idea and not consumed media.

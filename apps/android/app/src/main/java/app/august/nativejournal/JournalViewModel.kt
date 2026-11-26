@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 
-enum class Destination { Moments, Write, Review, Graph, Settings }
+enum class Destination { Moments, Write, Tasks, Review, Graph, Settings }
 
 data class JournalUiState(
     val booting: Boolean = true,
@@ -25,6 +25,11 @@ data class JournalUiState(
     val moments: List<Moment> = emptyList(),
     val review: ReviewResponse? = null,
     val graph: GraphResponse? = null,
+    val tasks: List<JournalTask> = emptyList(),
+    val loadingTasks: Boolean = false,
+    val tasksError: String? = null,
+    val updatingTasks: Set<String> = emptySet(),
+    val completedTask: JournalTask? = null,
     val reviewPeriod: String = "7",
     val busy: Boolean = false,
     val saving: Boolean = false,
@@ -49,7 +54,7 @@ data class JournalUiState(
 )
 
 class JournalViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = JournalRepository(EncryptedDeviceStorage(application), AugustHttp(), BuildConfig.DEBUG)
+    private val repository = (application as AugustApplication).repository
     private val mutable = MutableStateFlow(JournalUiState())
     val state = mutable.asStateFlow()
     private val initialized = CompletableDeferred<Unit>()
@@ -58,9 +63,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private var graphJob: Job? = null
     private var momentJob: Job? = null
     private var servicesJob: Job? = null
+    private var tasksJob: Job? = null
     private var reviewRequest = 0
     private var graphRequest = 0
     private var connectionJob: Job? = null
+    private var tasksRequested = false
 
     init {
         viewModelScope.launch {
@@ -70,19 +77,26 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 initialized.complete(Unit)
                 repository.state.collect { device ->
                     val changed = mutable.value.device.accountKey() != device.accountKey()
+                    val priorTasks = mutable.value.device.cachedTasks[device.accountKey()]
+                    val tasksChanged = !changed && priorTasks != null && priorTasks != device.cachedTasks[device.accountKey()]
                     if (changed) {
-                        momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); servicesJob?.cancel()
+                        momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); servicesJob?.cancel(); tasksJob?.cancel()
                         reviewRequest++; graphRequest++
                     }
+                    if (tasksChanged) { reviewJob?.cancel(); reviewRequest++ }
                     mutable.update { current ->
                         if (changed) current.copy(device = device,
                             draft = device.drafts[device.accountKey()]?.content.orEmpty(), draftStored = true,
                             moments = device.cachedMoments[device.accountKey()].orEmpty(), review = null, graph = null,
-                            destination = Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false,
-                            momentsError = null, reviewError = null, graphError = null, serverStatus = null, servicesError = null, loadingServices = false)
-                        else current.copy(device = device)
+                            destination = if (tasksRequested && device.session != null) Destination.Tasks else Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false,
+                            momentsError = null, reviewError = null, graphError = null, serverStatus = null, servicesError = null, loadingServices = false,
+                            tasks = device.cachedTasks[device.accountKey()].orEmpty(), loadingTasks = false, tasksError = null, updatingTasks = emptySet(), completedTask = null)
+                        else current.copy(device = device, tasks = if (current.preview) current.tasks else device.cachedTasks[device.accountKey()].orEmpty(),
+                            review = if (tasksChanged) null else current.review, loadingReview = if (tasksChanged) false else current.loadingReview)
                     }
-                    if (changed && device.session != null) refreshMoments()
+                    if (changed && device.session != null) { refreshMoments(); refreshTasks() }
+                    if (device.session != null) tasksRequested = false
+                    if (tasksChanged && state.value.destination == Destination.Review && !state.value.preview) loadReview()
                 }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -97,6 +111,12 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         if (destination == Destination.Review && state.value.review == null && !state.value.preview && !state.value.loadingReview) loadReview()
         if (destination == Destination.Graph && state.value.graph == null && !state.value.preview && !state.value.loadingGraph) loadGraph()
         if (destination == Destination.Settings && state.value.serverStatus == null && !state.value.preview && !state.value.loadingServices) checkServices()
+        if (destination == Destination.Tasks && !state.value.preview) refreshTasks()
+    }
+
+    fun openTasks() {
+        tasksRequested = true
+        if (state.value.device.session != null) { tasksRequested = false; navigate(Destination.Tasks) }
     }
 
     fun dismissError() { mutable.update { it.copy(error = null) } }
@@ -195,6 +215,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     reviewError = null, graphError = null,
                     destination = Destination.Moments, message = "Moment saved · ${saved.extractedCount} ${if (saved.extractedCount == 1) "memory" else "memories"} kept") }
                 refreshMoments()
+                refreshTasks()
             } catch (error: Exception) { report(error) }
             finally { mutable.update { it.copy(saving = false) } }
         }
@@ -266,8 +287,56 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
 
     fun appearance(value: String) { viewModelScope.launch { try { repository.appearance(value) } catch (error: Exception) { report(error) } } }
 
+    fun refreshTasks() {
+        if (state.value.preview || state.value.loadingTasks) return
+        val key = state.value.device.accountKey() ?: return
+        mutable.update { it.copy(loadingTasks = true, tasksError = null) }
+        tasksJob = viewModelScope.launch {
+            try { repository.tasks() }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }
+            } finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(loadingTasks = false) } }
+        }
+    }
+
+    fun completeTask(task: JournalTask, completed: Boolean) {
+        if (task.id in state.value.updatingTasks) return
+        if (state.value.preview) {
+            mutable.update { it.copy(tasks = it.tasks.map { saved -> if (saved.id == task.id) saved.copy(completed = completed) else saved }, completedTask = if (completed) task else null) }
+            return
+        }
+        val key = state.value.device.accountKey() ?: return
+        mutable.update { it.copy(updatingTasks = it.updatingTasks + task.id, tasksError = null) }
+        viewModelScope.launch {
+            try {
+                val saved = repository.completeTask(task.id, completed)
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(completedTask = if (completed) saved else null, review = null) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }
+            } finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(updatingTasks = it.updatingTasks - task.id) } }
+        }
+    }
+
+    fun editTask(task: JournalTask, title: String, dueAt: String?) {
+        if (task.id in state.value.updatingTasks) return
+        if (state.value.preview) { mutable.update { it.copy(tasks = it.tasks.map { saved -> if (saved.id == task.id) saved.copy(title = title, dueAt = dueAt) else saved }) }; return }
+        val key = state.value.device.accountKey() ?: return
+        mutable.update { it.copy(updatingTasks = it.updatingTasks + task.id, tasksError = null) }
+        viewModelScope.launch {
+            try { repository.editTask(task.id, title, dueAt, task.updatedAt) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }
+            } finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(updatingTasks = it.updatingTasks - task.id) } }
+        }
+    }
+    fun clearTaskNotice() { mutable.update { it.copy(completedTask = null) } }
+    fun taskReminders(enabled: Boolean) { viewModelScope.launch { try { repository.taskReminders(enabled) } catch (error: Exception) { report(error) } } }
+
     fun signOut() {
-        draftJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel(); servicesJob?.cancel()
+        draftJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel(); servicesJob?.cancel(); tasksJob?.cancel()
         if (state.value.preview) { mutable.update { JournalUiState(booting = false, device = repository.state.value) }; return }
         viewModelScope.launch {
             try {
@@ -293,6 +362,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     fun preview() {
         val moments = PreviewJournal.moments
         mutable.update { it.copy(preview = true, moments = moments, graph = PreviewJournal.graph, review = PreviewJournal.review,
+            tasks = PreviewJournal.tasks,
             destination = Destination.Moments, error = null) }
     }
 

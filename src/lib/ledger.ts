@@ -1,5 +1,6 @@
 import { intentionState, type IntentionState } from "./intention-state";
 import { memorySource, type MemorySource } from "./memory-source";
+import { taskMetadata, type TaskMetadata } from './task-state';
 
 /** Starter categories provide vocabulary and presentation, not a closed classification enum. */
 export const CATEGORY_DEFINITIONS = {
@@ -88,6 +89,7 @@ export function isObligation(category: string, action?: { kind?: unknown } | nul
 }
 
 export type CalendarAction = {
+  task?: TaskMetadata;
   memory?: MemorySource;
   is_actionable: boolean;
   kind?: CalendarKind;
@@ -119,6 +121,7 @@ export function normalizeStoredItem<T extends { category: string; calendar_actio
   const classification = getClassification(item);
   const state = intentionState(item);
   const memory = memorySource(item.calendar_action?.memory);
+  const task = taskMetadata(item.calendar_action?.task);
   return {
     ...item,
     category: classification.category,
@@ -126,7 +129,7 @@ export function normalizeStoredItem<T extends { category: string; calendar_actio
     review_state: state,
     memory,
     // Stale calendar metadata cannot turn a reflection or expense into an obligation.
-    calendar_action: isObligation(classification.category, item.calendar_action) ? item.calendar_action : { is_actionable: false, ...(state ? { review_state: state } : {}), ...(memory ? { memory } : {}) },
+    calendar_action: isObligation(classification.category, item.calendar_action) ? item.calendar_action : { is_actionable: false, ...(task ? { task } : {}), ...(state ? { review_state: state } : {}), ...(memory ? { memory } : {}) },
   };
 }
 
@@ -213,6 +216,14 @@ export function parseExtraction(value: unknown, referenceTime: string, catalogue
       end_time: end && Date.parse(end) > Date.parse(start!)
         ? end : new Date(Date.parse(start!) + 30 * 60 * 1000).toISOString(),
     } : { is_actionable: false, kind: "none" };
+    const existingTask = taskMetadata(raw.calendar_action.task);
+    if (raw.task_action !== undefined && (!isRecord(raw.task_action) || typeof raw.task_action.is_task !== 'boolean')) throw new Error('Invalid task intent.');
+    if (existingTask) calendar_action.task = existingTask;
+    if (isRecord(raw.task_action) && raw.task_action.is_task === true) {
+      const task = taskMetadata({ version: 1, title: raw.task_action.title, due_at: raw.task_action.due_at });
+      if (!task) throw new Error('Invalid task title or deadline.');
+      calendar_action.task = task;
+    }
     return {
       category,
       life_texture: getClassification({ category }).texture,

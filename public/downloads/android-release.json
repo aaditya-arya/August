@@ -1,11 +1,11 @@
 {
-  "version": "0.3.0",
-  "versionCode": 3,
+  "version": "0.4.0",
+  "versionCode": 4,
   "channel": "preview",
   "applicationId": "app.august.nativejournal.debug",
   "minimumAndroid": "8.0",
   "path": "/downloads/august-android-preview.apk",
-  "filename": "August-Android-v0.3.0-preview.apk",
-  "bytes": 13189308,
-  "sha256": "d001b0d52497e3bfcbc66083d9ee3fce4fb3006e76c3af8c561e433f30522baa"
+  "filename": "August-Android-v0.4.0-preview.apk",
+  "bytes": 14247849,
+  "sha256": "55e06e22fc8a458bb6bfea16b1448e3fda3ad60b020f9112fdfcbd144bd68bfa"
 }

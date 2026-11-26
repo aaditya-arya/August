@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">August</string>
+    <string name="task_widget_description">Your open tasks, deadlines, and a quick way to mark work complete.</string>
 </resources>

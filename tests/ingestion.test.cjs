@@ -88,3 +88,14 @@ test('submission retries recover pending calendar status without re-extracting o
   assert.equal(result.items[0].google_event_id, 'event-already-saved');
   assert.equal(attempts, 2); assert.equal(calls.extract, 0); assert.equal(calls.create, 0);
 });
+
+test('retrying a saved note cannot create a Calendar event for a task already completed', async () => {
+  const { deps, notes, calls } = fixture();
+  const id = noteIdForKey('ledger', context.key);
+  notes.set(id, { id, content: 'draft', items: [{ id: 'done-task', note_id: id, category: 'Task', content: 'Ship the website',
+    event_timestamp: context.currentTime, created_at: context.currentTime, calendar_status: 'none',
+    calendar_action: { is_actionable: true, kind: 'task', title: 'Ship website', start_time: '2026-12-01T10:00:00Z', review_state: { status: 'completed' } } }] });
+  const result = await createIngestor(deps)('draft', context);
+  assert.equal(result.reused, true);
+  assert.equal(calls.calendar, 0);
+});

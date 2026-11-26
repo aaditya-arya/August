@@ -3,6 +3,23 @@ export function validTimezone(value: unknown): string | null {
   try { new Intl.DateTimeFormat("en", { timeZone: value }).format(); return value; } catch { return null; }
 }
 
+/** Convert an explicit local wall time to an instant, including DST offsets. */
+export function zonedDateTimeToUtc(value: string, timezone: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || !validTimezone(timezone)) throw new Error('Invalid local deadline.');
+  const target = Date.parse(`${value}:00Z`);
+  if (!Number.isFinite(target)) throw new Error('Invalid local deadline.');
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  let instant = target;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const parts = formatter.formatToParts(new Date(instant));
+    const get = (key: string) => parts.find(part => part.type === key)!.value;
+    const shown = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+    if (shown === value) return new Date(instant).toISOString();
+    instant += target - Date.parse(`${shown}:00Z`);
+  }
+  throw new Error('This local deadline does not exist in the selected timezone.');
+}
+
 export function getRelativeTimeLabel(dateStr: string, now = new Date()): string {
   const date = new Date(dateStr);
   if (!Number.isFinite(date.getTime())) return "Recently";

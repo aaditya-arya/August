@@ -3,6 +3,7 @@ export type { CalendarAction } from "./ledger";
 
 export function shouldOfferCalendarAdd(item: { calendar_action?: CalendarAction | null; calendar_status?: string; google_event_id?: string | null }): boolean {
   return Boolean(item.calendar_action?.is_actionable && item.calendar_action.start_time && item.calendar_action.title &&
+    !['completed', 'paused', 'released'].includes(item.calendar_action.review_state?.status || '') &&
     Number.isFinite(Date.parse(item.calendar_action.start_time)) &&
     !item.google_event_id && item.calendar_status !== "synced" && item.calendar_status !== "pending");
 }
