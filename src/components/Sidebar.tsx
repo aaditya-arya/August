@@ -15,6 +15,7 @@ import {
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { AndroidDownload } from "@/components/AndroidDownload";
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
@@ -192,6 +193,7 @@ export function Sidebar() {
             </p>
           </Link>
           <div className="flex items-center gap-2">
+            <AndroidDownload iconOnly />
             <a
               href="/api/auth/google"
               aria-label={calendarConnected ? "Google Calendar connected" : "Connect Google Calendar"}
@@ -291,6 +293,7 @@ export function Sidebar() {
 
             {/* Google Calendar Integration & Footer */}
             <div className="mt-auto px-1 py-3">
+              <div className="mb-4"><AndroidDownload compact /></div>
               <div className="mb-4">
                 <ThemeToggle />
               </div>

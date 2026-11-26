@@ -10,6 +10,7 @@
     "dev:lan": "node scripts/dev-lan.cjs",
     "android": "node scripts/android.cjs install",
     "build:android": "node scripts/android.cjs build",
+    "package:android": "node scripts/package-android.cjs",
     "check:android": "node scripts/android.cjs check",
     "test:android:device": "node scripts/android.cjs device-test",
     "check:supabase": "node scripts/check-supabase.cjs",

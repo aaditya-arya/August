@@ -18,6 +18,12 @@ On macOS/Linux, use `sh ./gradlew` with the same task names. The wrapper downloa
 
 The installable development APK is `app/build/outputs/apk/debug/app-debug.apk`. With an authorized USB-debugging device connected, run `:app:installDebug`, or choose Run in Android Studio. Release builds require your own signing configuration before distribution; no signing key is committed.
 
+## Website download
+
+The website includes **Download for Android** on the public sign-in screen and in its navigation. The preview APK is served from `/downloads/august-android-preview.apk`, without requiring an account. Its version, byte count, and SHA-256 are recorded in `/downloads/android-release.json`.
+
+After a new debug build, run `npm run package:android` from the repository root. This copies the APK into `public/downloads` and regenerates the release metadata. Commit both files so the web host can serve the installer without needing an Android SDK during deployment. The website labels this as a development preview, installed as August Dev; it is not a Play Store release.
+
 The debug app is labelled **August Dev**, with application ID `app.august.nativejournal.debug`. The release application ID is `app.august.nativejournal`.
 
 ## Connect your existing journal

@@ -30,6 +30,8 @@ There is no need to copy `node_modules`, `.next`, or generated Android/iOS folde
 
 For the new native Material 3 application, open `apps/android` in Android Studio or follow [its build and setup guide](apps/android/README.md). It builds an installable APK using Gradle and uses the existing authenticated backend.
 
+The website's **Download for Android** button serves the packaged preview APK directly. To update that download after building a new APK, run `npm run package:android` and commit `public/downloads` with the release metadata.
+
 For a phone on the same Wi-Fi, run `npm run dev:lan` and enter the printed Wi-Fi address in the app. Tap **Check connection**, then **Continue with Google**. See [ANDROID.md](ANDROID.md) for firewall setup, native builds, and connection troubleshooting. Root server credentials must never be copied into the Android client.
 
 ## Checks and implementation notes

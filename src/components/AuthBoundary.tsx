@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import { Cloud, Feather, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import { browserAuthClient } from '@/lib/auth-browser';
 import { resetIntentions } from '@/lib/use-intentions';
+import { AndroidDownload } from './AndroidDownload';
 
 const Context = createContext<User | null>(null);
 export function useAccount() {
@@ -50,7 +51,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
     // Reload to clear account-specific module caches as well as the route tree.
     location.reload();
   }
-  if (loading) return <main className="flex min-h-dvh flex-1 items-center justify-center"><Loader2 aria-label="Restoring your session" className="animate-spin text-accent" /></main>;
+  if (loading) return <main className="flex min-h-dvh flex-1 items-center justify-center px-6 py-14"><div className="w-full max-w-md"><p role="status" className="mb-7 flex items-center justify-center gap-3 text-sm text-muted"><Loader2 className="animate-spin text-accent" size={18} /> Opening your journal…</p><AndroidDownload /></div></main>;
   if (!user) return <main className="flex min-h-dvh flex-1 items-center justify-center bg-background px-6 py-14">
     <div className="w-full max-w-md">
       <p className="mb-9 font-serif text-3xl italic text-accent">August</p>
@@ -62,6 +63,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
       </button>
       {googleEnabled === false && <p role="status" className="mt-4 text-sm leading-6 text-muted">Google sign-in is being configured. Your existing local drafts are preserved.</p>}
       {error && <p role="alert" className="mt-4 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
+      <div className="mt-7"><AndroidDownload /></div>
       <div className="mt-8 space-y-3 border-t border-border pt-6 text-xs leading-6 text-muted">
         <p className="flex items-center gap-2"><Cloud size={15} /> Saved progress follows your account across devices.</p>
         <p className="flex items-center gap-2"><ShieldCheck size={15} /> Sign-in uses your Google identity, without reading your Gmail inbox.</p>
