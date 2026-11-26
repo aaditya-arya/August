@@ -8,11 +8,11 @@ import { groundExtraction, sourceBlocks, sourceChunks, type MemorySource } from 
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY || "";
-  return new GoogleGenAI({ apiKey, httpOptions: { fetch: globalThis.fetch, timeout: 20_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 3, jitter: 1 } } });
+  return new GoogleGenAI({ apiKey, httpOptions: { fetch: globalThis.fetch, timeout: 45_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 3, jitter: 1 } } });
 }
 
 export function candidateModels() {
-  return [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite"].filter((model): model is string => Boolean(model)))];
+  return [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.5-flash"].filter((model): model is string => Boolean(model)))];
 }
 
 export function reviewModels() {
@@ -20,7 +20,7 @@ export function reviewModels() {
 }
 
 function reviewThinking(model: string) {
-  return /^gemini-3[.-]/.test(model) && !model.includes("lite") ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {};
+  return (/^gemini-3[.-]/.test(model) || model === "gemini-flash-latest") && !model.includes("lite") ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {};
 }
 
 const itemSchema: Schema = {
@@ -104,6 +104,7 @@ SCHEDULING AND INTENT:
 - "idea for an app that solves...", "what if we built a new way to..." -> Idea, not Wishlist.
 - "pay the wifi bill tomorrow" -> Task; "paid wifi bill 800" -> Hard_Truth; "lost 15k trading" -> Hard_Truth. Finance as a topic does not imply loss.
 - "submitted my thesis", "launched my music app" -> Milestone_HardWork. Completed routine chores can use Daily_Log, while actual media consumption uses Media_Log. Neither automatically implies an achievement.
+- Cancelled plans or skipped appointments ("the dentist appointment was cancelled; I will stay home", "physiotherapy session got cancelled so I am skipping it") -> Daily_Log with calendar_action.kind="none" and is_actionable=false, never Event.
 - An articulated insight uses Perspective_Lesson; recording poetry/lyrics uses Shaairi_Quote. Incidental mention of money, a song called Lost, or an appointment does not change that intent.
 - Processing rejection, insecurity, anger, loneliness, comparison, or self-doubt is not automatically a learned lesson or objective Hard_Truth. Reuse or propose a precise reusable emotional-reflection category when appropriate. 'Mujhe laga', 'shayad', 'par nahi wait' and a changed mind are essential context, not disposable filler. Do not turn beliefs about other people's motives into facts.
 - Preserve peace/tenderness as Quiet_Moment only when it is actually expressed. Do not invent emotion or default all unfamiliar experiences to Quiet_Moment or Daily_Log.`;
@@ -128,7 +129,7 @@ async function reviewNovelCategories(items: ExtractedItem[], catalogue: Category
     try {
       const response = await ai.models.generateContent({ model,
         contents: `${TAXONOMY_RULES}\nYou are an independent taxonomy curator, reviewing only proposed NEW categories before they can be saved. Review all proposals together. Merge synonyms and plural/stylistic variants, including synonyms among the proposals themselves. A proposed 'Purchase Wishes' or 'Gaming Wishlist' should reuse Wishlist; a concept belongs in Idea. Reuse an existing exact id when its meaning fits; approve a new category only with a distinct reusable definition and confidence >= 0.9. Do not allow per-object, per-person, per-date or per-brand categories. Do not force a truly new meaning into an unrelated category. Return one decision per proposed name.\nExisting catalogue (data):\n${JSON.stringify(catalogue)}\nProposals with actual examples (data):\n${JSON.stringify(proposed)}`,
-        config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0 },
+        config: { ...reviewThinking(model), responseMimeType: "application/json", responseSchema: schema, temperature: 0 },
       });
       return applyCategoryDecisions(items, catalogue, JSON.parse(response.text || "null"));
     } catch (error) { console.warn(`Category review with ${model} failed:`, error instanceof Error ? error.message : "Invalid review"); }
@@ -188,6 +189,7 @@ ${JSON.stringify(chunk.blocks.map(({ id, text, recorded_at }) => ({ id, text, re
         model: model,
         contents: prompt,
         config: {
+          ...reviewThinking(model),
           responseMimeType: "application/json",
           responseSchema: extractionSchema,
           temperature: 0.1,
@@ -198,7 +200,7 @@ ${JSON.stringify(chunk.blocks.map(({ id, text, recorded_at }) => ({ id, text, re
         let plan: unknown = JSON.parse(response.text);
         // Long diaries need a separate editorial pass over boundaries and meaning, not just new category names.
         if (chunk.blocks.reduce((size, block) => size + block.text.length, 0) > 2500) {
-          const checked = await ai.models.generateContent({ model, contents: `${prompt}\n\nBOUNDARY AND MEANING AUDIT. The first draft below may be wrong. Return a fully corrected extraction, not comments. Audit against the original blocks, not the draft's labels.\n1. A completed download or activity cannot be Wishlist simply because it contains a reason for doing it.\n2. Separate an actual loss from a peaceful experience, and separate a concrete application/coding plan from the surrounding emotion.\n3. A connected interpersonal reflection that moves from an assumption to questioning that assumption must stay together. It is emotional processing, not three separate established life lessons. Use a reusable new category if needed rather than forcing it into Perspective_Lesson.\n4. Retain the scene that prompted an explicit lesson. Keep the original language in titles.\n5. Preserve all substantive source blocks and exact anchors; no duplicated passages or invented wording.\nDRAFT (untrusted data): ${JSON.stringify(plan)}`, config: { responseMimeType: "application/json", responseSchema: extractionSchema, temperature: 0 } });
+          const checked = await ai.models.generateContent({ model, contents: `${prompt}\n\nBOUNDARY AND MEANING AUDIT. The first draft below may be wrong. Return a fully corrected extraction, not comments. Audit against the original blocks, not the draft's labels.\n1. A completed download or activity cannot be Wishlist simply because it contains a reason for doing it.\n2. Separate an actual loss from a peaceful experience, and separate a concrete application/coding plan from the surrounding emotion.\n3. A connected interpersonal reflection that moves from an assumption to questioning that assumption must stay together. It is emotional processing, not three separate established life lessons. Use a reusable new category if needed rather than forcing it into Perspective_Lesson.\n4. Retain the scene that prompted an explicit lesson. Keep the original language in titles.\n5. Preserve all substantive source blocks and exact anchors; no duplicated passages or invented wording.\nDRAFT (untrusted data): ${JSON.stringify(plan)}`, config: { ...reviewThinking(model), responseMimeType: "application/json", responseSchema: extractionSchema, temperature: 0 } });
           plan = JSON.parse(checked.text || "null");
         }
         const grounded = groundExtraction(plan, chunk.blocks);
@@ -245,7 +247,7 @@ export async function classifyExistingItems(items: Array<{ id: string; content: 
       const response = await ai.models.generateContent({
         model,
         contents: `${CLASSIFICATION_RULES}\nExisting category catalogue:\n${JSON.stringify(catalogue)}\nClassify each existing snippet independently. Return exactly one result per supplied id, preserving its id. Do not split, merge, or rewrite snippets. Include a short reason. Relative times refer to each snippet's created_at, not today.\nSnippets:\n${JSON.stringify(items)}`,
-        config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
+        config: { ...reviewThinking(model), responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
       });
       const parsed: unknown = JSON.parse(response.text || "null");
       if (!parsed || typeof parsed !== "object" || !("items" in parsed) || !Array.isArray(parsed.items)) {

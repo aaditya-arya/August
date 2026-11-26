@@ -32,11 +32,11 @@ test('changed or missing quotes, lost scenes and duplicated passages cannot be p
   assert.throws(() => groundExtraction({items:[{content:'not the original'}]}, blocks()), /missing verifiable/);
 });
 
-test('a mixed block can be split at exact anchors without dropping money or negation', () => {
+test('a mixed block can be split at exact anchors including overlapping quotes without dropping money or negation', () => {
   const text = 'The ride was peaceful and I was glad to have that quiet. My trade was down ₹2000, not a profit.';
   const result = groundExtraction({items:[
-    { source_spans:[{block_id:'b1', start_quote:'The ride was peaceful',end_quote:'that quiet.'}] },
-    { source_spans:[{block_id:'b1', start_quote:'My trade was down',end_quote:'not a profit.'}] },
+    { source_spans:[{block_id:'b1', start_quote:'The ride was peaceful and I was glad to have that quiet.',end_quote:'glad to have that quiet.'}] },
+    { source_spans:[{block_id:'b1', start_quote:'My trade was down ₹2000',end_quote:'₹2000, not a profit.'}] },
   ]}, sourceBlocks(text,now,'UTC'));
   assert.equal(result[0].content, 'The ride was peaceful and I was glad to have that quiet.');
   assert.equal(result[1].content, 'My trade was down ₹2000, not a profit.');
