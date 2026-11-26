@@ -5,6 +5,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 val AugustJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
+// Database fields such as tags can be null in older entries. Only API data uses
+// defaults for these values; encrypted storage and authentication stay strict.
+val ServerJson = Json(AugustJson) { coerceInputValues = true }
 
 @Serializable
 data class AuthConfig(val supabaseUrl: String, val supabaseAnonKey: String, val googleEnabled: Boolean)
@@ -61,12 +64,25 @@ data class Reflection(
     val question: String = "",
 )
 @Serializable
+data class ReviewIntention(
+    @SerialName("anchor_id") val anchorId: String,
+    val title: String,
+    val kind: String = "goal",
+    val status: String = "open",
+    val reflection: String = "",
+    val gap: String = "",
+    @SerialName("next_step") val nextStep: String = "",
+    @SerialName("source_ids") val sourceIds: List<String> = emptyList(),
+    val deadline: String? = null,
+)
+@Serializable
 data class ReviewResponse(
     val status: String,
     val message: String? = null,
     val review: Reflection? = null,
     val entries: List<Moment> = emptyList(),
     @SerialName("selected_count") val selectedCount: Int = 0,
+    val intentions: List<ReviewIntention> = emptyList(),
 )
 @Serializable
 data class GraphNode(val id: String, val name: String, val group: String, val color: String, val tags: List<String> = emptyList())
@@ -74,6 +90,11 @@ data class GraphNode(val id: String, val name: String, val group: String, val co
 data class GraphLink(val source: String, val target: String, val weight: Double, @SerialName("link_type") val type: String)
 @Serializable
 data class GraphResponse(val nodes: List<GraphNode> = emptyList(), val links: List<GraphLink> = emptyList())
+
+@Serializable
+data class ServiceCheck(val ready: Boolean, val message: String)
+@Serializable
+data class ServerStatus(val journal: ServiceCheck, val graph: ServiceCheck, val review: ServiceCheck)
 
 @Serializable
 data class DeviceState(

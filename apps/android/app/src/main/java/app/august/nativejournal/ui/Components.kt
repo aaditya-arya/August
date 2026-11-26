@@ -1,5 +1,11 @@
 package app.august.nativejournal.ui
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -9,8 +15,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +58,16 @@ fun momentDay(value: String): String = runCatching {
     when (day) { LocalDate.now() -> "Today"; LocalDate.now().minusDays(1) -> "Yesterday"; else -> day.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault())) }
 }.getOrElse { "Other moments" }
 
+fun Modifier.pressScale(interactionSource: InteractionSource, targetScale: Float = 0.96f): Modifier = composed {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) targetScale else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "pressScale",
+    )
+    graphicsLayer { scaleX = scale; scaleY = scale }
+}
+
 @Composable
 fun PageHeading(eyebrow: String, title: String, description: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -57,25 +83,61 @@ fun EmptyState(title: String, description: String, action: String? = null, onAct
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (action != null) FilledTonalButton(onClick = onAction) { Text(action) }
+            if (action != null) {
+                val interaction = remember { MutableInteractionSource() }
+                FilledTonalButton(onClick = onAction, interactionSource = interaction, modifier = Modifier.pressScale(interaction)) { Text(action) }
+            }
         }
     }
 }
 
 @Composable
-fun MomentCard(moment: Moment, onClick: () -> Unit) {
+fun RequestError(title: String, message: String, retry: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Card(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            Text(message, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+            FilledTonalButton(onClick = retry, interactionSource = interaction, modifier = Modifier.pressScale(interaction)) {
+                Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Try again")
+            }
+        }
+    }
+}
+
+@Composable
+fun LoadingCard(title: String, description: String) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+fun MomentCard(moment: Moment, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val accent = when (moment.category) {
         "Quiet_Moment", "Milestone_HardWork" -> MaterialTheme.colorScheme.secondary
         "Wishlist", "Media_Log" -> MaterialTheme.colorScheme.tertiary
         "Hard_Truth" -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.primary
     }
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+    val interaction = remember { MutableInteractionSource() }
+    Card(onClick = onClick, interactionSource = interaction,
+        modifier = modifier.fillMaxWidth().pressScale(interaction, targetScale = 0.98f),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp), color = accent.copy(alpha = .10f)) {
-                    Text(categoryLabel(moment.category), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium, color = accent)
+                Surface(modifier = Modifier.weight(1f, fill = false), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp), color = accent.copy(alpha = .10f)) {
+                    Text(categoryLabel(moment.category), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium, color = accent,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(momentDate(moment.eventTimestamp, "h:mm a"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -98,7 +160,10 @@ fun MomentDetail(moment: Moment, share: () -> Unit) {
         Text(moment.memory?.title?.ifBlank { null } ?: "A moment worth keeping", style = MaterialTheme.typography.headlineSmall)
         Text(momentDate(moment.eventTimestamp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
         SelectionContainer { Text(moment.content, style = MaterialTheme.typography.bodyLarge) }
-        Text(moment.tags.joinToString("  ") { "#$it" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = share) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Share this moment") }
+        if (moment.tags.isNotEmpty()) Text(moment.tags.joinToString("  ") { "#$it" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val shareInteraction = remember { MutableInteractionSource() }
+        OutlinedButton(onClick = share, interactionSource = shareInteraction, modifier = Modifier.pressScale(shareInteraction)) {
+            Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Share this moment")
+        }
     }
 }

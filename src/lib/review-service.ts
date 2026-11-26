@@ -22,13 +22,17 @@ export async function buildSundayReview(days: ReviewPeriod["days"], timezone: st
   if (pending.has(fingerprint)) return pending.get(fingerprint)!;
   const work = (async (): Promise<ReviewResponse> => {
     const selected = entries.filter((entry) => inReviewPeriod(entry, period));
-    const generated = selected.length ? await generateSundayReview(entries, period, timezone, await readReviewSources(entries)) : null;
+    const missingAiKey = selected.length > 0 && !process.env.GEMINI_API_KEY?.trim();
+    const generated = selected.length && !missingAiKey ? await generateSundayReview(entries, period, timezone, await readReviewSources(entries)) : null;
     if (generated) account.lastIntentions = generated.intentions;
     const response: ReviewResponse = {
       review: generated, status: generated ? "ready" : "unavailable", period,
       intentions: mergeIntentions(entries, generated?.intentions || account.lastIntentions),
       entries, selected_count: selected.length, context_count: entries.length, generated_at: now.toISOString(),
-      ...(!generated ? { message: "Your reflection could not be prepared right now. Your plans and countdowns are still available." } : {}),
+      ...(!generated ? { message: missingAiKey
+        ? "Reflections need GEMINI_API_KEY in the August Vercel project's Production environment. Add it and redeploy; your saved moments are safe."
+        : !selected.length ? "No saved moments fall in this period. Choose All time or save a new moment."
+        : "The AI reflection is temporarily unavailable. Your saved moments and plans are still available below. Try again shortly; if this continues, check the Gemini model, quota, and deployment logs." } : {}),
     };
     if (generated || !selected.length) { cache.set(fingerprint, { response, time: Date.now() }); if (cache.size > 12) cache.delete(cache.keys().next().value!); }
     return !generated && stored ? { ...stored.response, message: "Showing your last reflection. Refresh again in a little while." } : response;

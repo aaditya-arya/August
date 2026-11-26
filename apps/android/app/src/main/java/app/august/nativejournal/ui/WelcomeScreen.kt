@@ -2,7 +2,15 @@ package app.august.nativejournal.ui
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -82,8 +90,10 @@ fun WelcomeScreen(state: JournalUiState, addressChanged: () -> Unit, checkConnec
                     isError = state.connectionError != null,
                     supportingText = { Text(if (address.contains("10.0.2.2")) "That's an emulator address. On a phone, use your PC's Wi-Fi address." else "Keep your phone and PC on the same Wi-Fi.") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
+                val checkInteraction = remember { MutableInteractionSource() }
                 FilledTonalButton(onClick = { checkConnection(address) }, enabled = address.isNotBlank() && !blocked,
-                    modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp)) {
+                    interactionSource = checkInteraction,
+                    modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(checkInteraction), shape = RoundedCornerShape(14.dp)) {
                     if (state.checkingConnection) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Icon(if (ready) Icons.Default.CheckCircle else Icons.Default.Refresh, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
@@ -92,27 +102,40 @@ fun WelcomeScreen(state: JournalUiState, addressChanged: () -> Unit, checkConnec
                 if (state.checkingConnection) TextButton(onClick = addressChanged, modifier = Modifier.align(Alignment.End)) { Text("Cancel") }
             }
         }
-        state.connectionError?.let { message ->
-            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.errorContainer,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Let's check the connection", style = MaterialTheme.typography.titleSmall)
-                    Text(message, style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = openBrowser) { Text("Open address in browser") }
+        AnimatedVisibility(
+            visible = state.connectionError != null,
+            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+        ) {
+            state.connectionError?.let { message ->
+                Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Let's check the connection", style = MaterialTheme.typography.titleSmall)
+                        Text(message, style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = openBrowser) { Text("Open address in browser") }
+                    }
                 }
             }
         }
-        state.connectionMessage?.let { message ->
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(18.dp)).padding(16.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(if (ready) Icons.Default.CheckCircle else Icons.Default.Info, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        AnimatedVisibility(
+            visible = state.connectionMessage != null,
+            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+        ) {
+            state.connectionMessage?.let { message ->
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(18.dp)).padding(16.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite }, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(if (ready) Icons.Default.CheckCircle else Icons.Default.Info, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("2  ·  Make it yours", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = { signIn(address) }, enabled = ready && !blocked,
-                modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) {
+            val signInInteraction = remember { MutableInteractionSource() }
+            Button(onClick = { signIn(address) }, enabled = ready && !blocked, interactionSource = signInInteraction,
+                modifier = Modifier.fillMaxWidth().height(56.dp).pressScale(signInInteraction), shape = RoundedCornerShape(18.dp)) {
                 if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("G", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Spacer(Modifier.width(12.dp)); Text(if (state.busy) "Opening Google…" else "Continue with Google")

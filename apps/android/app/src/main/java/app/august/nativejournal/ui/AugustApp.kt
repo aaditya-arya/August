@@ -4,14 +4,28 @@ import android.content.Intent
 import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
@@ -19,12 +33,17 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.august.nativejournal.Destination
 import app.august.nativejournal.JournalViewModel
 import app.august.nativejournal.data.Moment
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,40 +64,124 @@ fun AugustApp(model: JournalViewModel) {
                     preview = model::preview,
                 )
                 else -> {
+                    val mainTabs = remember { listOf(Destination.Moments, Destination.Review, Destination.Graph, Destination.Settings) }
+                    val pagerState = rememberPagerState(
+                        initialPage = mainTabs.indexOf(state.destination).coerceAtLeast(0),
+                        pageCount = { mainTabs.size },
+                    )
+                    val haptics = LocalHapticFeedback.current
+                    val currentDestination by rememberUpdatedState(state.destination)
+                    LaunchedEffect(state.destination) {
+                        val target = mainTabs.indexOf(state.destination)
+                        if (target >= 0 && target != pagerState.currentPage) {
+                            pagerState.animateScrollToPage(target, animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                        }
+                    }
+                    LaunchedEffect(pagerState) {
+                        snapshotFlow { pagerState.settledPage }.drop(1).distinctUntilChanged().collect { page ->
+                            val destination = mainTabs[page]
+                            if (currentDestination != Destination.Write && currentDestination != destination) {
+                                model.navigate(destination)
+                            }
+                        }
+                    }
                     BackHandler(state.destination != Destination.Moments) { model.navigate(Destination.Moments) }
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text(if (state.destination == Destination.Write) "New moment" else "August", style = MaterialTheme.typography.titleLarge) },
+                                title = {
+                                    AnimatedContent(
+                                        targetState = state.destination,
+                                        transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                                        label = "Top bar title",
+                                    ) { destination ->
+                                        Text(when (destination) {
+                                            Destination.Moments -> "August"
+                                            Destination.Write -> "New moment"
+                                            Destination.Review -> "Your review"
+                                            Destination.Graph -> "Connections"
+                                            Destination.Settings -> "Settings"
+                                        }, style = MaterialTheme.typography.titleLarge)
+                                    }
+                                },
                                 navigationIcon = {
-                                    if (state.destination == Destination.Write) IconButton(onClick = { model.navigate(Destination.Moments) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to journal") }
+                                    AnimatedVisibility(
+                                        visible = state.destination == Destination.Write,
+                                        enter = fadeIn(tween(180)) + expandHorizontally(),
+                                        exit = fadeOut(tween(120)) + shrinkHorizontally(),
+                                    ) {
+                                        val backInteraction = remember { MutableInteractionSource() }
+                                        IconButton(
+                                            onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.navigate(Destination.Moments) },
+                                            interactionSource = backInteraction,
+                                            modifier = Modifier.pressScale(backInteraction, targetScale = 0.90f),
+                                        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to journal") }
+                                    }
                                 },
                                 actions = {
                                     if (state.preview) SuggestionChip(onClick = { model.navigate(Destination.Settings) }, label = { Text("Sample journal") })
                                     Spacer(Modifier.width(8.dp))
-                                    if (state.destination == Destination.Moments) IconButton(onClick = model::refreshMoments, enabled = !state.loadingMoments && !state.preview) { Icon(Icons.Default.Refresh, "Refresh moments") }
+                                    AnimatedVisibility(visible = state.destination == Destination.Moments, enter = fadeIn(tween(160)), exit = fadeOut(tween(120))) {
+                                        val refreshInteraction = remember { MutableInteractionSource() }
+                                        IconButton(
+                                            onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.refreshMoments() },
+                                            enabled = !state.loadingMoments && !state.preview,
+                                            interactionSource = refreshInteraction,
+                                            modifier = Modifier.pressScale(refreshInteraction, targetScale = 0.90f),
+                                        ) { Icon(Icons.Default.Refresh, "Refresh moments") }
+                                    }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                             )
                         },
                         bottomBar = {
-                            if (state.destination != Destination.Write) NavigationBar {
-                                val tabs = listOf(
-                                    Triple(Destination.Moments, "Journal", Icons.AutoMirrored.Filled.List),
-                                    Triple(Destination.Review, "Review", Icons.Default.DateRange),
-                                    Triple(Destination.Graph, "Connections", Icons.Default.Share),
-                                    Triple(Destination.Settings, "You", Icons.Default.Person),
-                                )
-                                tabs.forEach { (destination, label, icon) -> NavigationBarItem(
-                                    selected = state.destination == destination,
-                                    onClick = { model.navigate(destination) }, icon = { Icon(icon, null) }, label = { Text(label) },
-                                ) }
+                            AnimatedVisibility(
+                                visible = state.destination != Destination.Write,
+                                enter = slideInVertically(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(160)),
+                                exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(120)),
+                            ) {
+                                NavigationBar {
+                                    val tabs = listOf(
+                                        Triple(Destination.Moments, "Journal", Icons.AutoMirrored.Filled.List),
+                                        Triple(Destination.Review, "Review", Icons.Default.DateRange),
+                                        Triple(Destination.Graph, "Connections", Icons.Default.Share),
+                                        Triple(Destination.Settings, "Settings", Icons.Default.Person),
+                                    )
+                                    tabs.forEach { (destination, label, icon) ->
+                                        val selected = state.destination == destination
+                                        val iconScale by animateFloatAsState(
+                                            targetValue = if (selected) 1.12f else 1f,
+                                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                                            label = "navIconScale",
+                                        )
+                                        NavigationBarItem(
+                                            selected = selected,
+                                            onClick = {
+                                                if (!selected) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                model.navigate(destination)
+                                            },
+                                            icon = { Icon(icon, null, modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale }) },
+                                            label = { Text(label) },
+                                        )
+                                    }
+                                }
                             }
                         },
                         floatingActionButton = {
-                            if (state.destination == Destination.Moments) ExtendedFloatingActionButton(
-                                onClick = { model.navigate(Destination.Write) }, icon = { Icon(Icons.Default.Edit, null) }, text = { Text("Write a moment") },
-                            )
+                            AnimatedVisibility(
+                                visible = state.destination == Destination.Moments,
+                                enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)) + fadeIn(tween(160)),
+                                exit = scaleOut(tween(140)) + fadeOut(tween(120)),
+                            ) {
+                                val fabInteraction = remember { MutableInteractionSource() }
+                                ExtendedFloatingActionButton(
+                                    onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.navigate(Destination.Write) },
+                                    interactionSource = fabInteraction,
+                                    modifier = Modifier.pressScale(fabInteraction, targetScale = 0.94f),
+                                    icon = { Icon(Icons.Default.Edit, null) },
+                                    text = { Text("Write a moment") },
+                                )
+                            }
                         },
                         snackbarHost = { SnackbarHost(snackbar) },
                     ) { padding ->
@@ -86,22 +189,42 @@ fun AugustApp(model: JournalViewModel) {
                             if (state.preview) Text("Preview · sample entries, not your saved journal", style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 24.dp, vertical = 8.dp))
-                            AnimatedContent(targetState = state.destination, modifier = Modifier.weight(1f), label = "Journal navigation",
-                                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(90)) }) { destination ->
-                            when (destination) {
-                                Destination.Moments -> MomentsScreen(state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) })
-                                Destination.Write -> WriteScreen(state, edit = model::edit, save = model::save)
-                                Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
-                                Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph)
-                                Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut)
-                            }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    beyondViewportPageCount = 1,
+                                    userScrollEnabled = state.destination != Destination.Write && pagerState.currentPage != 2,
+                                    modifier = Modifier.fillMaxSize(),
+                                ) { page ->
+                                    when (mainTabs[page]) {
+                                        Destination.Moments -> MomentsScreen(state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
+                                            retry = model::refreshMoments, navigate = model::navigate)
+                                        Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
+                                        Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
+                                        Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
+                                        Destination.Write -> Unit
+                                    }
+                                }
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = state.destination == Destination.Write,
+                                    enter = slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(180)),
+                                    exit = slideOutHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(140)),
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                                        WriteScreen(state, edit = model::edit, save = model::save)
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
             selectedMoment?.let { moment ->
-                ModalBottomSheet(onDismissRequest = { selectedMoment = null }) {
+                ModalBottomSheet(
+                    onDismissRequest = { selectedMoment = null },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                ) {
                     MomentDetail(moment, share = {
                         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, moment.content) }, "Share moment"))
                     })

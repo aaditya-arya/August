@@ -114,14 +114,15 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
     }
 
     private suspend fun authorized(path: String, parameters: Map<String, String> = emptyMap(),
-                                   method: String = "GET", body: String? = null, retryKey: String? = null): String {
+                                   method: String = "GET", body: String? = null, retryKey: String? = null,
+                                   timeoutSeconds: Long = 30): String {
         val key = state.value.accountKey() ?: error("Sign in to open your journal.")
         val expectedGeneration = generation
         val connection = state.value.connection!!
         suspend fun send(force: Boolean): String {
             val token = session(force).accessToken
             checkAccount(key, expectedGeneration)
-            val result = http.request(http.url(connection.server, path, parameters), method, body, token, retryKey = retryKey)
+            val result = http.request(http.url(connection.server, path, parameters), method, body, token, retryKey = retryKey, timeoutSeconds = timeoutSeconds)
             checkAccount(key, expectedGeneration)
             return result
         }
@@ -131,7 +132,7 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
     suspend fun moments(): List<Moment> {
         val key = state.value.accountKey() ?: error("Sign in to open your journal.")
         val expectedGeneration = generation
-        val items = AugustJson.decodeFromString<ItemsResponse>(authorized("/api/items", mapOf("days" to "all"))).items
+        val items = ServerJson.decodeFromString<ItemsResponse>(authorized("/api/items", mapOf("days" to "all"))).items
         checkAccount(key, expectedGeneration)
         change {
             check(it.accountKey() == key && generation == expectedGeneration) { "The active account changed. Please try again." }
@@ -155,7 +156,7 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
         // Write the exact retry identity before sending anything over the network.
         change { it.copy(drafts = it.drafts + (key to (it.drafts[key] ?: Draft()).copy(pending = submission))) }
         val body = buildJsonObject { put("content", submission.content); put("currentTime", submission.currentTime); put("timezone", submission.timezone) }.toString()
-        val saved = AugustJson.decodeFromString<SaveResponse>(authorized("/api/notes", method = "POST", body = body, retryKey = submission.key))
+        val saved = ServerJson.decodeFromString<SaveResponse>(authorized("/api/notes", method = "POST", body = body, retryKey = submission.key, timeoutSeconds = 300))
         check(saved.success) { "The moment was not saved. Your draft is still here." }
         checkAccount(key, expectedGeneration)
         change { it.copy(drafts = it.drafts + (key to (it.drafts[key] ?: Draft()).afterSave(submission))) }
@@ -164,12 +165,13 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
 
     suspend fun review(days: String, refresh: Boolean): ReviewResponse {
         require(days in listOf("7", "30", "all"))
-        return AugustJson.decodeFromString(authorized("/api/digest/synthesis", mapOf(
+        return ServerJson.decodeFromString(authorized("/api/digest/synthesis", mapOf(
             "days" to days, "timezone" to ZoneId.systemDefault().id, "refresh" to if (refresh) "1" else "0",
-        )))
+        ), timeoutSeconds = 300))
     }
 
-    suspend fun graph(): GraphResponse = AugustJson.decodeFromString(authorized("/api/graph"))
+    suspend fun graph(): GraphResponse = ServerJson.decodeFromString(authorized("/api/graph"))
+    suspend fun serverStatus(): ServerStatus = ServerJson.decodeFromString(authorized("/api/health"))
     suspend fun appearance(value: String) { require(value in listOf("system", "light", "dark")); change { it.copy(appearance = value) } }
 
     suspend fun signOut() {

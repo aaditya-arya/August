@@ -29,8 +29,10 @@ fun connectionFailure(url: String, cause: IOException): IOException {
         address.host == "10.0.2.2" -> "10.0.2.2 is for Android Emulator. On a physical phone, enter your PC's Wi-Fi address instead."
         cause is SSLHandshakeException -> "Couldn't establish a secure connection to $origin. Check the server's HTTPS certificate."
         cause is UnknownHostException -> "Couldn't find ${address.host}. Check the server address and your internet connection."
-        cause is InterruptedIOException -> "The connection to $origin timed out. Open this address in your phone's browser and check the PC's firewall."
-        cause is ConnectException -> "Couldn't connect to $origin. Keep the server running, use the same Wi-Fi, and allow the port through the PC's firewall."
+        cause is InterruptedIOException -> if (address.scheme == "https") "The server at $origin took too long to respond. Check your internet connection and try again."
+            else "The connection to $origin timed out. Open this address in your phone's browser and check the PC's firewall."
+        cause is ConnectException -> if (address.scheme == "https") "Couldn't connect to $origin. Check your internet connection and the website's availability."
+            else "Couldn't connect to $origin. Keep the server running, use the same Wi-Fi, and allow the port through the PC's firewall."
         cause.message?.contains("CLEARTEXT", ignoreCase = true) == true -> "This build requires HTTPS. Use the development APK for a local HTTP server."
         else -> "Couldn't reach $origin. Try opening this address in your phone's browser to check the connection."
     }
@@ -62,6 +64,8 @@ class AugustHttp(private val client: OkHttpClient = OkHttpClient.Builder()
                         try {
                             val content = it.body?.string().orEmpty()
                             if (!it.isSuccessful) {
+                                if (it.code in 300..399) throw ApiFailure(it.code,
+                                    "This server redirects to another page instead of returning your journal. Use your public Production address; protected Vercel previews require browser sign-in.")
                                 val error = runCatching { AugustJson.decodeFromString<JsonObject>(content) }.getOrNull()
                                 val message = listOf("error_description", "msg", "message", "error").firstNotNullOfOrNull { key ->
                                     runCatching { error?.get(key)?.jsonPrimitive?.content?.takeIf { value -> value.isNotBlank() } }.getOrNull()

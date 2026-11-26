@@ -35,6 +35,73 @@ class JournalRepositoryTest {
             Session("old-access", "refresh-token", if (expired) 1 else Instant.now().epochSecond + 3600, user = Account("account-a", "a@example.test")))
     }
 
+    @Test fun journalAndReviewAcceptOlderNullableTagsAndKeepSourceEvidence() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val repository = JournalRepository(MemoryStorage(device(server)), AugustHttp(), true)
+            repository.initialize()
+            val entry = """{"id":"entry-a","content":"I shipped the project.","category":"Milestone_HardWork","tags":null,"event_timestamp":"2026-11-26T06:00:00Z","created_at":"2026-11-26T06:00:00Z","memory":null}"""
+            server.enqueue(MockResponse().setBody("""{"items":[$entry]}"""))
+            assertEquals(emptyList<String>(), repository.moments().single().tags)
+            assertEquals("/api/items?days=all", server.takeRequest().path)
+            server.enqueue(MockResponse().setBody("""{"status":"ready","selected_count":1,"entries":[$entry],"review":{"opening":"A week of movement.","focus":null,"progress":[{"title":"You shipped","meaning":"The project was completed.","takeaway":"Notice the progress.","source_ids":["entry-a"]}],"experiences":[],"lessons":[],"patterns":[],"next_step":null,"question":"What helped?"},"intentions":[{"anchor_id":"entry-a","title":"Build the next version","next_step":"Choose one change","source_ids":["entry-a"],"deadline":null}]}"""))
+            val review = repository.review("all", true)
+            assertEquals("entry-a", review.review!!.progress.single().sourceIds.single())
+            assertEquals("Choose one change", review.intentions.single().nextStep)
+            assertEquals(emptyList<String>(), review.entries.single().tags)
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("days=all"))
+            assertTrue(request.path!!.contains("refresh=1"))
+            assertEquals("Bearer old-access", request.getHeader("Authorization"))
+        }
+    }
+
+    @Test fun connectionsRefreshAuthenticationThenPreserveGraphLinks() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val initial = device(server)
+            val repository = JournalRepository(MemoryStorage(initial), AugustHttp(), true)
+            repository.initialize()
+            server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"Expired session"}"""))
+            server.enqueue(MockResponse().setBody(AugustJson.encodeToString(initial.session!!.copy(accessToken = "rotated-access"))))
+            server.enqueue(MockResponse().setBody("""{"nodes":[{"id":"a","name":"First moment","group":"Idea","color":"#5855D6","tags":null},{"id":"b","name":"Second moment","group":"Idea","color":"#5855D6","tags":["work"]}],"links":[{"source":"a","target":"b","weight":0.8,"link_type":"semantic","id":"edge-a"}],"stats":{"nodeCount":2}}"""))
+            val graph = repository.graph()
+            assertEquals(2, graph.nodes.size)
+            assertEquals("semantic", graph.links.single().type)
+            assertEquals("a", graph.links.single().source)
+            assertEquals("Bearer old-access", server.takeRequest().getHeader("Authorization"))
+            assertTrue(server.takeRequest().path!!.startsWith("/auth/v1/token?"))
+            assertEquals("Bearer rotated-access", server.takeRequest().getHeader("Authorization"))
+        }
+    }
+
+    @Test fun serviceChecksStayAuthenticatedAndExplainMissingAiConfiguration() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val repository = JournalRepository(MemoryStorage(device(server)), AugustHttp(), true)
+            repository.initialize()
+            server.enqueue(MockResponse().setBody("""{"journal":{"ready":true,"message":"Reachable"},"graph":{"ready":true,"message":"Reachable"},"review":{"ready":false,"message":"Add GEMINI_API_KEY and redeploy"}}"""))
+            val status = repository.serverStatus()
+            assertTrue(status.journal.ready)
+            assertFalse(status.review.ready)
+            assertTrue(status.review.message.contains("GEMINI_API_KEY"))
+            val request = server.takeRequest()
+            assertEquals("/api/health", request.path)
+            assertEquals("Bearer old-access", request.getHeader("Authorization"))
+        }
+    }
+
+    @Test fun protectedPreviewRedirectsGiveAnActionableError() = runBlocking {
+        MockWebServer().use { server ->
+            server.start()
+            val repository = JournalRepository(MemoryStorage(device(server)), AugustHttp(), true)
+            repository.initialize()
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", "https://vercel.com/sso-api"))
+            try { repository.graph(); fail("Expected protected preview") }
+            catch (error: ApiFailure) { assertTrue(error.message!!.contains("public Production address")) }
+        }
+    }
+
     @Test fun failedSavesRetainTheDraftAndRetryTheSameKey() = runBlocking {
         MockWebServer().use { server ->
             server.start()

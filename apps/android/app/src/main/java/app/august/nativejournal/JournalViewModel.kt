@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
 
 enum class Destination { Moments, Write, Review, Graph, Settings }
 
@@ -30,6 +31,12 @@ data class JournalUiState(
     val loadingMoments: Boolean = false,
     val loadingReview: Boolean = false,
     val loadingGraph: Boolean = false,
+    val momentsError: String? = null,
+    val reviewError: String? = null,
+    val graphError: String? = null,
+    val serverStatus: ServerStatus? = null,
+    val loadingServices: Boolean = false,
+    val servicesError: String? = null,
     val error: String? = null,
     val message: String? = null,
     val preview: Boolean = false,
@@ -50,6 +57,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private var reviewJob: Job? = null
     private var graphJob: Job? = null
     private var momentJob: Job? = null
+    private var servicesJob: Job? = null
     private var reviewRequest = 0
     private var graphRequest = 0
     private var connectionJob: Job? = null
@@ -63,14 +71,15 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 repository.state.collect { device ->
                     val changed = mutable.value.device.accountKey() != device.accountKey()
                     if (changed) {
-                        momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel()
+                        momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); servicesJob?.cancel()
                         reviewRequest++; graphRequest++
                     }
                     mutable.update { current ->
                         if (changed) current.copy(device = device,
                             draft = device.drafts[device.accountKey()]?.content.orEmpty(), draftStored = true,
                             moments = device.cachedMoments[device.accountKey()].orEmpty(), review = null, graph = null,
-                            destination = Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false)
+                            destination = Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false,
+                            momentsError = null, reviewError = null, graphError = null, serverStatus = null, servicesError = null, loadingServices = false)
                         else current.copy(device = device)
                     }
                     if (changed && device.session != null) refreshMoments()
@@ -85,8 +94,9 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
 
     fun navigate(destination: Destination) {
         mutable.update { it.copy(destination = destination) }
-        if (destination == Destination.Review && state.value.review == null && !state.value.preview) loadReview()
-        if (destination == Destination.Graph && state.value.graph == null && !state.value.preview) loadGraph()
+        if (destination == Destination.Review && state.value.review == null && !state.value.preview && !state.value.loadingReview) loadReview()
+        if (destination == Destination.Graph && state.value.graph == null && !state.value.preview && !state.value.loadingGraph) loadGraph()
+        if (destination == Destination.Settings && state.value.serverStatus == null && !state.value.preview && !state.value.loadingServices) checkServices()
     }
 
     fun dismissError() { mutable.update { it.copy(error = null) } }
@@ -178,7 +188,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 draftJob?.cancel()
                 repository.setDraft(submitted)
                 val saved = repository.save()
+                reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel()
+                reviewRequest++; graphRequest++
                 mutable.update { it.copy(draft = "", draftStored = true, review = null, graph = null,
+                    loadingReview = false, loadingGraph = false, loadingMoments = false,
+                    reviewError = null, graphError = null,
                     destination = Destination.Moments, message = "Moment saved · ${saved.extractedCount} ${if (saved.extractedCount == 1) "memory" else "memories"} kept") }
                 refreshMoments()
             } catch (error: Exception) { report(error) }
@@ -189,40 +203,71 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     fun refreshMoments() {
         if (state.value.loadingMoments || state.value.preview) return
         val key = state.value.device.accountKey() ?: return
-        mutable.update { it.copy(loadingMoments = true) }
+        mutable.update { it.copy(loadingMoments = true, momentsError = null) }
         momentJob = viewModelScope.launch {
             try { val moments = repository.moments(); if (key == repository.state.value.accountKey()) mutable.update { it.copy(moments = moments) } }
-            catch (error: Exception) { report(error) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(momentsError = requestMessage(error)) }
+            }
             finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(loadingMoments = false) } }
         }
     }
 
     fun loadReview(period: String = state.value.reviewPeriod, refresh: Boolean = false) {
+        if (state.value.preview) { mutable.update { it.copy(reviewPeriod = period) }; return }
         reviewJob?.cancel()
         val request = ++reviewRequest
-        mutable.update { it.copy(reviewPeriod = period, loadingReview = true, review = null) }
+        mutable.update { it.copy(reviewPeriod = period, loadingReview = true, reviewError = null,
+            review = if (it.reviewPeriod == period) it.review else null) }
         reviewJob = viewModelScope.launch {
             try { val review = repository.review(period, refresh); if (request == reviewRequest) mutable.update { it.copy(review = review) } }
-            catch (error: Exception) { report(error) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (request == reviewRequest) mutable.update { it.copy(reviewError = requestMessage(error)) }
+            }
             finally { if (request == reviewRequest) mutable.update { it.copy(loadingReview = false) } }
         }
     }
 
     fun loadGraph() {
+        if (state.value.preview) return
         graphJob?.cancel()
         val request = ++graphRequest
-        mutable.update { it.copy(loadingGraph = true) }
+        mutable.update { it.copy(loadingGraph = true, graphError = null) }
         graphJob = viewModelScope.launch {
             try { val graph = repository.graph(); if (request == graphRequest) mutable.update { it.copy(graph = graph) } }
-            catch (error: Exception) { report(error) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (request == graphRequest) mutable.update { it.copy(graphError = requestMessage(error)) }
+            }
             finally { if (request == graphRequest) mutable.update { it.copy(loadingGraph = false) } }
+        }
+    }
+
+    fun checkServices() {
+        if (state.value.preview || state.value.loadingServices) return
+        val key = state.value.device.accountKey() ?: return
+        mutable.update { it.copy(loadingServices = true, servicesError = null) }
+        servicesJob = viewModelScope.launch {
+            try {
+                val result = repository.serverStatus()
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(serverStatus = result) }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update {
+                    it.copy(servicesError = if (error is ApiFailure && error.status == 404)
+                        "Server checks need the latest August web deployment. Your existing journal can still be opened."
+                    else requestMessage(error))
+                }
+            } finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(loadingServices = false) } }
         }
     }
 
     fun appearance(value: String) { viewModelScope.launch { try { repository.appearance(value) } catch (error: Exception) { report(error) } } }
 
     fun signOut() {
-        draftJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel()
+        draftJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel(); servicesJob?.cancel()
         if (state.value.preview) { mutable.update { JournalUiState(booting = false, device = repository.state.value) }; return }
         viewModelScope.launch {
             try {
@@ -253,6 +298,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
 
     private fun report(error: Exception) {
         if (error is CancellationException) throw error
-        mutable.update { it.copy(error = error.message ?: "Something went wrong. Please try again.") }
+        mutable.update { it.copy(error = requestMessage(error)) }
     }
+}
+
+fun requestMessage(error: Exception): String = when (error) {
+    is SerializationException -> "August couldn't read this server response. Check that the app and web deployment are up to date, then retry."
+    else -> error.message ?: "Something went wrong. Please try again."
 }
