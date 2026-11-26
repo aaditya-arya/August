@@ -21,9 +21,15 @@ where n.nspname = 'public'
 select tablename, policyname, permissive, roles
 from pg_policies
 where schemaname = 'public' and policyname like 'account_%';
+
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in ('notes', 'extracted_items', 'graph_edges')
+  and grantee in ('anon', 'authenticated');
 ```
 
-Expect three tables with `rls_enabled = true` and six account policies, including one restrictive boundary for each table. The API also checks the installed security version before accessing journal data.
+Expect three tables with `rls_enabled = true` and six account policies, including one restrictive boundary for each table. `authenticated` needs SELECT, INSERT, UPDATE, and DELETE on all three tables; `anon` should have no table grants. RLS policies restrict the rows after the table privileges permit access. The API also checks the installed security version before accessing journal data.
 
 ## 2. Configure Google
 
@@ -63,7 +69,11 @@ The diagnostic should report **Anonymous table access denied as expected** for a
 
 Open `http://localhost:3000`, sign in, save a test moment, sign out, then sign in again and confirm it remains. Use a second Google account in another browser profile and confirm it cannot see the first account's moment. Keep each test account on the Google testing allowlist if required. Test cloud saves on Android using the same Google account and backend.
 
-There is no deployed web address yet. To sync from a distributed Android APK, deploy the Next.js backend to an HTTPS host with the root server environment variables configured, then enter that origin in Android's connection screen. Public Supabase URL/key are the only Supabase settings exposed to the clients; AI keys and Calendar secrets stay on the server. A local-only backend cannot provide always-available phone synchronization.
+For the public deployment, use `https://august-topaz.vercel.app` in Android's connection screen. Set server variables on the **Vercel August project**, because the PC's `.env.local` does not configure deployed functions. Production needs public Supabase URL/key plus `GEMINI_API_KEY`; Calendar additionally needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Set `NEXT_PUBLIC_APP_URL=https://august-topaz.vercel.app`, and register `https://august-topaz.vercel.app/api/auth/google/callback` on the Google web OAuth client alongside the Supabase callback. The Calendar code uses the incoming request origin for its callback, including when a local environment still names localhost.
+
+Redeploy Production after changing its variables, and ensure the deployment includes the latest code, not an older main commit or a protected preview URL. If optional `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, or `GEMINI_REVIEW_MODEL` variables are present, they override the defaults; use the values in `.env.example` for the tested Lite preferences. Public Supabase URL/key are the only Supabase settings exposed to clients; AI keys and Calendar secrets stay on the server.
+
+Install the latest website APK as an update to August Dev. In Settings, check the version and **Server status**, then save a small test moment, open Review for All time, and open Connections. Review generation can fall back to a different model when Gemini is overloaded; if all models fail, original moments remain readable. Repeat the account-isolation check above on the phone. These authenticated device checks still need to be performed by the account holder.
 
 ## 5. Recover earlier progress deliberately
 

@@ -16,6 +16,7 @@ alter table public.graph_edges enable row level security;
 -- Restrictive policies apply even if the project previously had permissive demo
 -- policies. Anonymous access is explicitly removed as well.
 revoke all on public.notes, public.extracted_items, public.graph_edges from public, anon;
+grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.notes, public.extracted_items, public.graph_edges to authenticated;
 
 drop policy if exists account_notes_allow on public.notes;

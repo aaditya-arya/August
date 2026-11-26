@@ -27,6 +27,8 @@ test('manual calendar controls are available for failures but not synced or pend
   assert.equal(shouldOfferCalendarAdd({ ...item, google_event_id: 'already-created' }), false);
 });
 
+
+
 test('cookie token storage and deterministic Calendar IDs work without filesystem writes', async (t) => {
   const modulePath = require.resolve('next/headers');
   const previous = require.cache[modulePath];
@@ -56,4 +58,16 @@ test('cookie token storage and deterministic Calendar IDs work without filesyste
   await calendar.clearStoredTokens();
   assert.equal(await calendar.isCalendarConnected(), false);
   });
+});
+
+test('Calendar authorization uses the requested production origin even when the local app URL is configured', t => {
+  for (const [name, value] of Object.entries({ GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-secret', NEXT_PUBLIC_APP_URL: 'http://localhost:3000' })) {
+    const previous = process.env[name]; process.env[name] = value;
+    t.after(() => { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; });
+  }
+  const { getGoogleAuthUrl } = require('../.test-build/calendar-server.js');
+  const url = new URL(getGoogleAuthUrl('test-state', 'https://august-topaz.vercel.app'));
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://august-topaz.vercel.app/api/auth/google/callback');
+  assert.equal(url.searchParams.get('state'), 'test-state');
+  assert.equal(url.searchParams.get('client_secret'), null);
 });

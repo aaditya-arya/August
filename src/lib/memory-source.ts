@@ -89,7 +89,7 @@ export function groundExtraction(value: unknown, blocks: SourceBlock[]) {
         if (typeof first !== "string" || typeof last !== "string" || !first || !last) throw new Error("Both exact passage anchors are required.");
         start = block.text.indexOf(first);
         const finish = first === last ? start : block.text.indexOf(last, start);
-        if (start < 0 || finish < 0 || finish + last.length < start + first.length || block.text.lastIndexOf(first) !== start || (first !== last && block.text.lastIndexOf(last) !== finish)) throw new Error("A memory's source anchors were changed or ambiguous.");
+        if (start < 0 || finish < 0 || finish + last.length < start + first.length || block.text.lastIndexOf(first) !== start || block.text.indexOf(last) !== finish || block.text.lastIndexOf(last) !== finish) throw new Error("A memory's source anchors were changed or ambiguous.");
         end = finish + last.length;
       }
       return { start: block.start + start, end: block.start + end, text: block.text.slice(start, end), recorded_at: block.recorded_at };

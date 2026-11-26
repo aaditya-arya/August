@@ -61,3 +61,16 @@ test('invalid pasted dates and malformed provenance are rejected', () => {
   assert.throws(() => sourceBlocks('[9:00 am, 31/2/2026] Writer: Some text',now,'UTC'), /invalid date/);
   assert.equal(memorySource({version:1,title:'x',recorded_at:now,spans:[{start:-1,end:8}]}),null);
 });
+
+test('overlapping anchors remain exact and unique and cannot truncate the opening anchor', () => {
+  const note = 'Paid 1,200 for the broadband bill this morning.';
+  const blocks = sourceBlocks(note, now, 'UTC');
+  const plan = (start, end) => ({ items: [{ source_spans: [{ block_id: 'b1', start_quote: start, end_quote: end }] }] });
+  const grounded = groundExtraction(plan('Paid 1,200 for the broadband bill', 'broadband bill this morning.'), blocks);
+  assert.equal(grounded[0].content, note);
+  assert.deepEqual(grounded[0].memory.spans, [{ start: 0, end: note.length }]);
+  assert.throws(() => groundExtraction(plan(note, 'broadband bill'), blocks), /changed or ambiguous/);
+  assert.throws(() => groundExtraction(plan('Paid 1200', 'this morning.'), blocks), /changed or ambiguous/);
+  const repeated = sourceBlocks('end. A unique opening goes here end.', now, 'UTC');
+  assert.throws(() => groundExtraction(plan('A unique opening', 'end.'), repeated), /changed or ambiguous/);
+});

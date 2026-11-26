@@ -44,5 +44,32 @@ const fixtures = [
     currentTime: '2026-10-31T10:00:00.000Z', timezone: 'Asia/Kolkata',
   });
   assert.deepEqual(mixed.map((item) => item.category).sort(), ['Hard_Truth', 'Reminder']);
-  console.log(`Live extraction passed: ${fixtures.length} category fixtures, timezone calculation, and mixed-intent splitting.`);
+  const denseFacts = [
+    ['Paid 1,200 for the broadband bill this morning.', 'Hard_Truth', '1,200'],
+    ['The dentist appointment was cancelled; I will stay home.', 'Daily_Log', 'dentist'],
+    ['Need to call the bank about my debit card tomorrow at 6pm.', 'Reminder', 'bank'],
+    ['I want to buy a Keychron keyboard someday.', 'Wishlist', 'Keychron'],
+    ['I have an idea for an app that helps neighbours share spare tools.', 'Idea', 'neighbours'],
+    ['Finished reading Deep Work after dinner.', 'Media_Log', 'Deep Work'],
+    ['Finally submitted my thesis after six months of hard work.', 'Milestone_HardWork', 'thesis'],
+    ['I learned that taking smaller steps makes difficult work easier to start.', 'Perspective_Lesson', 'smaller steps'],
+    ['Felt peaceful on a quiet walk with Dad.', 'Quiet_Moment', 'Dad'],
+    ['Remind me to send the project report tomorrow at 9am.', 'Reminder', 'report'],
+  ];
+  const denseText = denseFacts.map(([sentence]) => sentence).join(' ');
+  const started = Date.now();
+  const dense = await extractItems(denseText, { currentTime: '2026-10-31T10:00:00.000Z', timezone: 'Asia/Kolkata' });
+  for (const [, category, anchor] of denseFacts) {
+    const memory = dense.find(item => item.content.includes(anchor));
+    assert.ok(memory, `Dense paragraph dropped ${anchor}`);
+    assert.equal(memory.category, category, `Dense paragraph misclassified ${anchor}`);
+  }
+  const cancelled = dense.find(item => item.content.includes('dentist'));
+  assert.equal(cancelled.calendar_action.is_actionable, false);
+  assert.equal(cancelled.calendar_action.kind, 'none');
+  for (const item of dense) {
+    const original = item.calendar_action.memory.spans.map(span => denseText.slice(span.start, span.end)).join('\n\n');
+    assert.equal(item.content, original, 'Every saved passage must be copied from the original paragraph.');
+  }
+  console.log(`Live extraction passed: ${fixtures.length} category fixtures, timezone calculation, mixed-intent splitting, and ${dense.length} dense-paragraph memories (${((Date.now() - started) / 1000).toFixed(1)}s).`);
 })().catch((error) => { console.error(error.message); process.exitCode = 1; });

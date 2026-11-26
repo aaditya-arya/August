@@ -18,6 +18,8 @@ const assert = require('node:assert/strict');
       create policy old_demo_items on extracted_items for all to public using(true) with check(true);
       create policy old_demo_edges on graph_edges for all to public using(true) with check(true);`);
     const sql = fs.readFileSync('supabase/migrations/202611120001_account_ownership.sql','utf8');
+    // Do not let the test setup's grants conceal a missing schema/table grant.
+    await db.exec('revoke usage on schema public from authenticated; revoke all on notes, extracted_items, graph_edges from authenticated;');
     await db.exec(sql);
     await db.exec(sql); // Reapplying the migration must be safe.
     assert.equal((await db.query('select count(*)::int as n from notes where user_id is null')).rows[0].n,1);
