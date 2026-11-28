@@ -2,6 +2,7 @@ package app.august.nativejournal.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,19 +56,26 @@ internal fun JournalDashboard(state: JournalUiState, write: () -> Unit, openTask
                 color = Color.White, style = MaterialTheme.typography.displayMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val writeInteraction = remember { MutableInteractionSource() }
                 Button(
                     onClick = write,
+                    interactionSource = writeInteraction,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1FAF4), contentColor = Color(0xFF153C36)),
-                    modifier = Modifier.semantics { contentDescription = "Write a moment" },
+                    modifier = Modifier.pressScale(writeInteraction, targetScale = 0.95f).semantics { contentDescription = "Write a moment" },
                 ) {
                     Text(if (state.draft.isBlank()) "Start writing" else "Continue draft")
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp))
                 }
-                if (open > 0) TextButton(
-                    onClick = openTasks,
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDCF4E9)),
-                ) { Text("$open open") }
+                if (open > 0) {
+                    val openInteraction = remember { MutableInteractionSource() }
+                    TextButton(
+                        onClick = openTasks,
+                        interactionSource = openInteraction,
+                        modifier = Modifier.pressScale(openInteraction, targetScale = 0.95f),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDCF4E9)),
+                    ) { Text("$open open") }
+                }
             }
         }
     }

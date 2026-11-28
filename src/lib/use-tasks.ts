@@ -8,14 +8,16 @@ const initial: Snapshot = { tasks: [], loading: true, error: null, updating: [] 
 let snapshot = initial, generation = 0;
 let requestVersion = 0;
 let pending: Promise<void> | null = null;
+let queued = false;
 const listeners = new Set<() => void>();
 const emit = (value: Snapshot) => { snapshot = value; listeners.forEach(listener => listener()); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export function resetTasks() { generation++; requestVersion++; pending = null; emit(initial); }
+export function resetTasks() { generation++; requestVersion++; pending = null; queued = false; emit(initial); }
 export async function refreshTasks() {
-  if (pending || snapshot.updating.length) return pending;
+  if (pending) { queued = true; return pending; }
+  if (snapshot.updating.length) return;
   const request = generation;
   const version = ++requestVersion;
   emit({ ...snapshot, loading: true, error: null });
@@ -27,7 +29,13 @@ export async function refreshTasks() {
       if (request === generation && version === requestVersion) emit({ ...snapshot, tasks: result.tasks, loading: false, error: null });
     } catch (error) { if (request === generation && version === requestVersion) emit({ ...snapshot, loading: false, error: error instanceof Error ? error.message : 'Could not load tasks.' }); }
   })();
-  try { await pending; } finally { if (request === generation && version === requestVersion) pending = null; }
+  try { await pending; } finally {
+    if (request === generation && version === requestVersion) pending = null;
+    if (queued && request === generation && !snapshot.updating.length) {
+      queued = false;
+      void refreshTasks();
+    }
+  }
 }
 
 export async function updateTask(id: string, patch: { completed?: boolean; title?: string; due_at?: string | null; expected_updated_at?: string }) {

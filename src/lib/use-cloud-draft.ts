@@ -17,7 +17,7 @@ type View = {
 const initial: View = { ready: false, content: "", cloud: null, busy: null, problem: null, conflict: false, offline: false, earlier: "" };
 const legacyDraftKey = "august-writing-draft";
 const saveDelay = 450;
-const organizeDelay = 15_000;
+const organizeDelay = 2_500;
 const draftFlushers = new Map<string, () => Promise<boolean>>();
 
 export async function flushCloudDraft(account: string) {
@@ -38,7 +38,7 @@ function legacyValue(key: string) {
   try { return localStorage.getItem(key) || ""; } catch { return ""; }
 }
 
-export function useCloudDraft(account: string, editorActive: boolean, onFiled: () => void) {
+export function useCloudDraft(account: string, editorActive: boolean, onFiled: () => void, immediateOrganize = false) {
   const [view, setView] = useState(initial);
   const live = useRef(initial);
   const mounted = useRef(false);
@@ -170,10 +170,14 @@ export function useCloudDraft(account: string, editorActive: boolean, onFiled: (
   const dirty = view.content !== (view.cloud?.content ?? "");
   useEffect(() => {
     if (view.ready && dirty && !view.busy && !view.conflict && !view.problem && !view.offline) {
+      if (immediateOrganize) {
+        void write();
+        return;
+      }
       const timer = window.setTimeout(() => void write(), saveDelay);
       return () => window.clearTimeout(timer);
     }
-  }, [dirty, view, write]);
+  }, [dirty, immediateOrganize, view, write]);
 
   useEffect(() => {
     if (view.offline || !view.cloud || view.busy || view.conflict || view.problem) return;
@@ -185,10 +189,23 @@ export function useCloudDraft(account: string, editorActive: boolean, onFiled: (
       return () => window.clearTimeout(timer);
     }
     if (!dirty && !editorActive && view.cloud.status === "editing" && view.cloud.content.trim()) {
+      if (immediateOrganize) {
+        void organize();
+        return;
+      }
       const timer = window.setTimeout(() => void organize(), organizeDelay);
       return () => window.clearTimeout(timer);
     }
-  }, [dirty, editorActive, load, organize, view]);
+  }, [dirty, editorActive, immediateOrganize, load, organize, view]);
+
+  const organizeNow = useCallback(async () => {
+    if (live.current.offline || live.current.conflict || !live.current.ready) return;
+    if (saving.current) await saving.current;
+    if (live.current.content !== (live.current.cloud?.content ?? "")) {
+      await write();
+    }
+    await organize();
+  }, [organize, write]);
 
   function recoverEarlier() {
     if (!view.earlier || view.earlier.length > MAX_DRAFT_LENGTH || view.content || view.busy) return;
@@ -201,6 +218,7 @@ export function useCloudDraft(account: string, editorActive: boolean, onFiled: (
     view, dirty,
     edit: (content: string) => update({ content, problem: null }),
     recoverEarlier,
+    organizeNow,
     retry: () => view.problem === "load" ? void load(!view.ready) : view.problem === "organize"
       ? void organize() : void write(view.cloud?.status === "filed"),
     newEntry: () => void write(true),

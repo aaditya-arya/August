@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useCloudDraft } from "@/lib/use-cloud-draft";
 import { useAccount } from "./AuthBoundary";
 
@@ -14,8 +15,9 @@ function notifyFiled() {
 
 export function CloudDraftProvider({ children }: { children: ReactNode }) {
   const { id } = useAccount();
+  const pathname = usePathname();
   const [editorActive, setEditorActive] = useState(false);
-  const draft = useCloudDraft(id, editorActive, notifyFiled);
+  const draft = useCloudDraft(id, editorActive, notifyFiled, pathname !== "/");
   return <DraftContext.Provider value={{ ...draft, setEditorActive }}>{children}</DraftContext.Provider>;
 }
 

@@ -111,7 +111,7 @@ export function WritingComposer() {
     if (dirty && view.offline) return "Offline · waiting to save";
     if (view.problem === "save") return "Cloud save couldn’t finish";
     if (dirty || view.busy === "save") return "Saving to cloud…";
-    if (organizing) return "Saved to cloud · organizing";
+    if (organizing) return "Organizing into tasks & memories…";
     if (filed) return "In your journal";
     if (view.content) return "Saved to cloud";
     return "Cloud autosave on";
@@ -209,12 +209,17 @@ export function WritingComposer() {
         <p id={`${id}-hint`}>
           {receipt ? <span className={styles.receipt} key={receipt.noteId}>{receipt.moments} {receipt.moments === 1 ? "moment" : "moments"} saved{actions ? ` · ${actions}` : ""}</span>
             : view.content.length >= MAX_DRAFT_LENGTH ? "This entry reached its character limit. Step away to let August organize it."
-            : "Autosaves as you write. August organizes it when you step away."}
+            : "Autosaves to cloud. Organizes when you step away, or click Organize now."}
         </p>
         {filed ? <button className={styles.newEntry} type="button" onClick={() => {
           creatingEntry.current = true;
           cloudDraft.newEntry();
-        }} disabled={Boolean(view.busy)}><Plus size={16} aria-hidden="true" /> New entry</button> : <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>}
+        }} disabled={Boolean(view.busy)}><Plus size={16} aria-hidden="true" /> New entry</button> : <div className={styles.footerActions}>
+          <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
+          {!organizing && !view.conflict && view.content.trim().length > 0 && (
+            <button className={styles.newEntry} type="button" onClick={() => void cloudDraft.organizeNow()} disabled={Boolean(view.busy)}>Organize now</button>
+          )}
+        </div>}
       </footer>
     </div>
   </section>;
