@@ -215,10 +215,10 @@ fun AugustApp(model: JournalViewModel) {
                                 ) { page ->
                                     when (mainTabs[page]) {
                                         Destination.Moments -> MomentsScreen(state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
-                                            retry = model::refreshMoments, navigate = model::navigate)
+                                            retry = model::refreshMoments)
                                         Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
-                                        Destination.Tasks -> TasksScreen(state, refresh = model::refreshTasks, complete = model::completeTask, edit = model::editTask,
-                                            write = { model.navigate(Destination.Write) }, reminders = model::taskReminders)
+                                        Destination.Tasks -> TasksScreen(state, refresh = { model.refreshTasks() }, complete = model::completeTask, edit = model::editTask,
+                                            add = model::openTaskForm, reminders = model::taskReminders)
                                         Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
                                         Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
                                         Destination.Write -> Unit
@@ -238,6 +238,10 @@ fun AugustApp(model: JournalViewModel) {
                         }
                     }
                 }
+            }
+            if (state.taskFormOpen && (state.device.session != null || state.preview)) {
+                TaskEditor(busy = state.creatingTask, saveError = state.taskFormError,
+                    close = model::closeTaskForm, save = model::createTask)
             }
             selectedMoment?.let { moment ->
                 ModalBottomSheet(

@@ -30,11 +30,16 @@ data class JournalUiState(
     val tasksError: String? = null,
     val updatingTasks: Set<String> = emptySet(),
     val completedTask: JournalTask? = null,
+    val taskFormOpen: Boolean = false,
+    val creatingTask: Boolean = false,
+    val taskFormError: String? = null,
     val reviewPeriod: String = "7",
     val busy: Boolean = false,
     val saving: Boolean = false,
     val loadingMoments: Boolean = false,
     val loadingReview: Boolean = false,
+    val loadingReflection: Boolean = false,
+    val reflectionError: String? = null,
     val loadingGraph: Boolean = false,
     val momentsError: String? = null,
     val reviewError: String? = null,
@@ -68,34 +73,39 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private var graphRequest = 0
     private var connectionJob: Job? = null
     private var tasksRequested = false
+    private var quickAddRequested = false
+    private var taskRead = 0
 
     init {
         viewModelScope.launch {
             try {
                 repository.initialize()
-                mutable.update { it.copy(booting = false) }
                 initialized.complete(Unit)
                 repository.state.collect { device ->
                     val changed = mutable.value.device.accountKey() != device.accountKey()
                     val priorTasks = mutable.value.device.cachedTasks[device.accountKey()]
-                    val tasksChanged = !changed && priorTasks != null && priorTasks != device.cachedTasks[device.accountKey()]
+                    val tasksChanged = !changed && priorTasks.orEmpty() != device.cachedTasks[device.accountKey()].orEmpty()
                     if (changed) {
                         momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); servicesJob?.cancel(); tasksJob?.cancel()
                         reviewRequest++; graphRequest++
                     }
                     if (tasksChanged) { reviewJob?.cancel(); reviewRequest++ }
                     mutable.update { current ->
-                        if (changed) current.copy(device = device,
+                        if (changed) current.copy(device = device, booting = false,
                             draft = device.drafts[device.accountKey()]?.content.orEmpty(), draftStored = true,
                             moments = device.cachedMoments[device.accountKey()].orEmpty(), review = null, graph = null,
                             destination = if (tasksRequested && device.session != null) Destination.Tasks else Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false,
-                            momentsError = null, reviewError = null, graphError = null, serverStatus = null, servicesError = null, loadingServices = false,
+                            momentsError = null, reviewError = null, reflectionError = null, loadingReflection = false,
+                            graphError = null, serverStatus = null, servicesError = null, loadingServices = false,
+                            taskFormOpen = quickAddRequested && device.session != null, creatingTask = false, taskFormError = null,
                             tasks = device.cachedTasks[device.accountKey()].orEmpty(), loadingTasks = false, tasksError = null, updatingTasks = emptySet(), completedTask = null)
-                        else current.copy(device = device, tasks = if (current.preview) current.tasks else device.cachedTasks[device.accountKey()].orEmpty(),
-                            review = if (tasksChanged) null else current.review, loadingReview = if (tasksChanged) false else current.loadingReview)
+                        else current.copy(device = device, booting = false, tasks = if (current.preview) current.tasks else device.cachedTasks[device.accountKey()].orEmpty(),
+                            review = if (tasksChanged && current.destination != Destination.Review) null else current.review,
+                            loadingReview = if (tasksChanged) false else current.loadingReview,
+                            loadingReflection = if (tasksChanged) false else current.loadingReflection)
                     }
                     if (changed && device.session != null) { refreshMoments(); refreshTasks() }
-                    if (device.session != null) tasksRequested = false
+                    if (device.session != null) { tasksRequested = false; quickAddRequested = false }
                     if (tasksChanged && state.value.destination == Destination.Review && !state.value.preview) loadReview()
                 }
             } catch (error: Exception) {
@@ -114,9 +124,44 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         if (destination == Destination.Tasks && !state.value.preview) refreshTasks()
     }
 
-    fun openTasks() {
+    fun openTasks(add: Boolean = false) {
         tasksRequested = true
-        if (state.value.device.session != null) { tasksRequested = false; navigate(Destination.Tasks) }
+        quickAddRequested = add
+        if (state.value.device.session != null) {
+            tasksRequested = false
+            quickAddRequested = false
+            navigate(Destination.Tasks)
+            if (add) openTaskForm()
+        }
+    }
+
+    fun openTaskForm() { mutable.update { it.copy(taskFormOpen = true, taskFormError = null) } }
+    fun closeTaskForm() { if (!state.value.creatingTask) mutable.update { it.copy(taskFormOpen = false, taskFormError = null) } }
+
+    fun createTask(title: String, dueAt: String?, retryKey: String) {
+        if (state.value.creatingTask) return
+        if (state.value.preview) {
+            val now = java.time.Instant.now().toString()
+            val task = JournalTask(retryKey, title, title, dueAt, updatedAt = now, createdAt = now)
+            mutable.update { it.copy(tasks = it.tasks + task, taskFormOpen = false, message = "Task added to sample journal") }
+            return
+        }
+        val key = state.value.device.accountKey() ?: return
+        mutable.update { it.copy(creatingTask = true, taskFormError = null) }
+        viewModelScope.launch {
+            try {
+                repository.createTask(title, dueAt, retryKey)
+                if (key == repository.state.value.accountKey()) {
+                    mutable.update { it.copy(taskFormOpen = false, message = "Task added") }
+                    refreshMoments()
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(taskFormError = requestMessage(error)) }
+            } finally {
+                if (key == repository.state.value.accountKey()) mutable.update { it.copy(creatingTask = false) }
+            }
+        }
     }
 
     fun dismissError() { mutable.update { it.copy(error = null) } }
@@ -144,16 +189,17 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun signIn(server: String, openBrowser: (String) -> Unit) {
-        if (state.value.busy) return
-        if (state.value.checkedServer == null || !state.value.connectionGoogleEnabled) {
-            mutable.update { it.copy(connectionError = "Check your server connection before signing in.") }
-            return
-        }
-        mutable.update { it.copy(busy = true, error = null) }
+        if (state.value.busy || state.value.checkingConnection) return
+        mutable.update { it.copy(busy = true, error = null, connectionError = null) }
         viewModelScope.launch {
             try {
                 initialized.await()
-                check(normalizeServer(server, BuildConfig.DEBUG) == state.value.checkedServer) { "The address changed. Check the connection again." }
+                val address = normalizeServer(server, BuildConfig.DEBUG)
+                if (address != state.value.checkedServer || !state.value.connectionGoogleEnabled) {
+                    val connection = repository.connect(address)
+                    check(connection.config.googleEnabled) { "Google sign-in is unavailable on this server." }
+                    mutable.update { it.copy(checkedServer = connection.server, connectionGoogleEnabled = true) }
+                }
                 openBrowser(repository.beginSignIn())
             }
             catch (error: Exception) {
@@ -211,11 +257,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 reviewJob?.cancel(); graphJob?.cancel(); momentJob?.cancel()
                 reviewRequest++; graphRequest++
                 mutable.update { it.copy(draft = "", draftStored = true, review = null, graph = null,
-                    loadingReview = false, loadingGraph = false, loadingMoments = false,
-                    reviewError = null, graphError = null,
+                    loadingReview = false, loadingReflection = false, loadingGraph = false, loadingMoments = false,
+                    reviewError = null, reflectionError = null, graphError = null,
                     destination = Destination.Moments, message = "Moment saved · ${saved.extractedCount} ${if (saved.extractedCount == 1) "memory" else "memories"} kept") }
                 refreshMoments()
-                refreshTasks()
+                refreshTasks(restart = true)
             } catch (error: Exception) { report(error) }
             finally { mutable.update { it.copy(saving = false) } }
         }
@@ -239,15 +285,33 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         if (state.value.preview) { mutable.update { it.copy(reviewPeriod = period) }; return }
         reviewJob?.cancel()
         val request = ++reviewRequest
-        mutable.update { it.copy(reviewPeriod = period, loadingReview = true, reviewError = null,
+        mutable.update { it.copy(reviewPeriod = period, loadingReview = true, loadingReflection = false, reviewError = null, reflectionError = null,
             review = if (it.reviewPeriod == period) it.review else null) }
         reviewJob = viewModelScope.launch {
-            try { val review = repository.review(period, refresh); if (request == reviewRequest) mutable.update { it.copy(review = review) } }
+            var hasSummary = false
+            try {
+                val summary = repository.review(period, refresh, summary = true)
+                if (request != reviewRequest) return@launch
+                hasSummary = true
+                mutable.update { it.copy(
+                    review = if (summary.review == null && !refresh && it.review?.review != null) it.review else summary,
+                    loadingReview = false, loadingReflection = summary.status == "summary" && summary.selectedCount > 0,
+                ) }
+                if (summary.status != "summary" || summary.selectedCount == 0) return@launch
+                val review = repository.review(period, refresh)
+                if (request == reviewRequest) mutable.update { current ->
+                    current.copy(review = if (review.review != null) review else current.review ?: summary,
+                        reflectionError = review.message.takeIf { review.review == null })
+                }
+            }
             catch (error: Exception) {
                 if (error is CancellationException) throw error
-                if (request == reviewRequest) mutable.update { it.copy(reviewError = requestMessage(error)) }
+                if (request == reviewRequest) mutable.update {
+                    if (hasSummary) it.copy(reflectionError = requestMessage(error))
+                    else it.copy(reviewError = requestMessage(error))
+                }
             }
-            finally { if (request == reviewRequest) mutable.update { it.copy(loadingReview = false) } }
+            finally { if (request == reviewRequest) mutable.update { it.copy(loadingReview = false, loadingReflection = false) } }
         }
     }
 
@@ -287,16 +351,18 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
 
     fun appearance(value: String) { viewModelScope.launch { try { repository.appearance(value) } catch (error: Exception) { report(error) } } }
 
-    fun refreshTasks() {
-        if (state.value.preview || state.value.loadingTasks) return
+    fun refreshTasks(restart: Boolean = false) {
+        if (state.value.preview || (state.value.loadingTasks && !restart)) return
         val key = state.value.device.accountKey() ?: return
+        tasksJob?.cancel()
+        val read = ++taskRead
         mutable.update { it.copy(loadingTasks = true, tasksError = null) }
         tasksJob = viewModelScope.launch {
             try { repository.tasks() }
             catch (error: Exception) {
                 if (error is CancellationException) throw error
-                if (key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }
-            } finally { if (key == repository.state.value.accountKey()) mutable.update { it.copy(loadingTasks = false) } }
+                if (read == taskRead && key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }
+            } finally { if (read == taskRead && key == repository.state.value.accountKey()) mutable.update { it.copy(loadingTasks = false) } }
         }
     }
 

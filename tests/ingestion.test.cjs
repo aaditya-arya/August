@@ -99,3 +99,35 @@ test('retrying a saved note cannot create a Calendar event for a task already co
   assert.equal(result.reused, true);
   assert.equal(calls.calendar, 0);
 });
+
+test('manual task saves without an AI key and a retry keeps the same task', async () => {
+  const { saveManualTask } = require('../.test-build/ingestion.js');
+  const { runWithAccount } = require('../.test-build/account-context.js');
+  const { toTask } = require('../.test-build/tasks.js');
+  const notes = new Map();
+  const database = {
+    from(table) {
+      if (table === 'notes') return {
+        select: () => ({ eq: (_, id) => ({ maybeSingle: async () => ({ data: notes.get(id) || null }) }) }),
+        insert: async note => { notes.set(note.id, { ...note, extracted_items: [] }); return {}; },
+      };
+      assert.equal(table, 'extracted_items');
+      return { insert: rows => ({ select: async () => {
+        const saved = rows.map(row => ({ ...row, created_at: context.currentTime }));
+        notes.get(rows[0].note_id).extracted_items = saved;
+        return { data: saved };
+      } }) };
+    },
+  };
+  const task = { version: 1, title: 'Send the design', due_at: '2026-12-01T12:30:00.000Z' };
+  const save = userId => runWithAccount({ userId, database }, () => saveManualTask(task, 'same-device-key', 'Asia/Kolkata'));
+  const first = await save('task-owner');
+  const retry = await save('task-owner');
+  const separate = await save('another-owner');
+  assert.equal(first.id, retry.id);
+  assert.notEqual(first.note_id, separate.note_id);
+  assert.equal(notes.size, 2);
+  assert.equal(first.embedding, null);
+  assert.equal(first.calendar_status, 'none');
+  assert.equal(toTask(first).due_at, task.due_at);
+});

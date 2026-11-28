@@ -12,6 +12,7 @@ import android.widget.RemoteViews
 import androidx.core.net.toUri
 import androidx.work.*
 import app.august.nativejournal.AugustApplication
+import app.august.nativejournal.MainActivity
 import app.august.nativejournal.R
 import app.august.nativejournal.data.DeviceState
 import app.august.nativejournal.data.accountKey
@@ -50,11 +51,23 @@ class TaskWidget : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, TaskWidget::class.java))
             val account = state.accountKey()
-            val tasks = state.cachedTasks[account].orEmpty().filterNot { it.completed }.sortedWith(compareBy({ it.dueAt ?: "9999" }, { it.createdAt }))
+            val open = state.cachedTasks[account].orEmpty().filterNot { it.completed }
+                .sortedWith(compareBy({ it.dueAt ?: "9999" }, { it.createdAt }))
+            // A compact widget may fit only one row. Give a just-saved task
+            // that spot briefly so the add action has visible feedback.
+            val recentCutoff = Instant.now().minusSeconds(300)
+            val newest = open.mapNotNull { task ->
+                runCatching { Instant.parse(task.createdAt) }.getOrNull()?.let { task to it }
+            }.filter { it.second.isAfter(recentCutoff) }.maxByOrNull { it.second }?.first
+            val tasks = if (newest == null) open else listOf(newest) + open.filterNot { it.id == newest.id }
             ids.forEach { widget ->
                 val views = RemoteViews(context.packageName, R.layout.task_widget)
                 views.setOnClickPendingIntent(R.id.widget_header, TaskRuntime.openTasks(context, widget))
-                views.setTextViewText(R.id.widget_count, if (account == null) "Sign in to see your tasks" else "${tasks.size} things to move forward")
+                val add = Intent(context, MainActivity::class.java).setAction("app.august.nativejournal.ADD_TASK")
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                views.setOnClickPendingIntent(R.id.widget_add, PendingIntent.getActivity(context, widget, add,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                views.setTextViewText(R.id.widget_count, if (account == null) "Sign in to see tasks" else "${tasks.size} open")
                 views.removeAllViews(R.id.widget_tasks)
                 val maxRows = ((manager.getAppWidgetOptions(widget).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 250) - 120) / 56).coerceIn(1, 8)
                 tasks.take(maxRows).forEach { task ->
@@ -70,8 +83,8 @@ class TaskWidget : AppWidgetProvider() {
                     views.addView(R.id.widget_tasks, row)
                 }
                 views.setViewVisibility(R.id.widget_empty, if (tasks.isEmpty()) View.VISIBLE else View.GONE)
-                views.setTextViewText(R.id.widget_empty, if (account == null) "Open August to connect your journal." else "A clear little space. Add a task in August.")
-                views.setTextViewText(R.id.widget_status, status ?: if (tasks.size > maxRows) "+${tasks.size - maxRows} more · Open Tasks" else "Tap a circle to finish · Refresh ↻")
+                views.setTextViewText(R.id.widget_empty, if (account == null) "Open August to sign in." else "No open tasks")
+                views.setTextViewText(R.id.widget_status, status ?: if (tasks.size > maxRows) "+${tasks.size - maxRows} more · Open Tasks" else "Refresh ↻")
                 views.setOnClickPendingIntent(R.id.widget_status, if (tasks.size > maxRows) TaskRuntime.openTasks(context, widget) else PendingIntent.getBroadcast(context, widget,
                     Intent(context, TaskWidget::class.java).setAction(REFRESH), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
                 try { manager.updateAppWidget(widget, views) } catch (_: IllegalArgumentException) { /* The launcher may have just removed this widget. */ }

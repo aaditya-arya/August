@@ -49,6 +49,7 @@ class TasksIntegrationTest {
     private val saved = ConcurrentHashMap<String, JournalTask>()
     private val id = "11111111-1111-4111-8111-111111111111"
     private var connected = false
+    private val reflectionStarted = java.util.concurrent.CountDownLatch(1)
 
     @Before fun connectSyntheticJournal() = runBlocking {
         repository.initialize()
@@ -73,8 +74,28 @@ class TasksIntegrationTest {
                             dueAt = if (update.has("due_at")) if (update.isNull("due_at")) null else update.getString("due_at") else previous.dueAt)
                         saved[taskId] = next
                         AugustJson.encodeToString(TaskMutation(next))
+                    } else if (request.method == "POST") {
+                        val data = JSONObject(request.body.readUtf8())
+                        val key = checkNotNull(request.getHeader("Idempotency-Key"))
+                        val task = saved.computeIfAbsent(key) {
+                            val created = Instant.now().toString()
+                            JournalTask(key, data.getString("title"), data.getString("title"),
+                                data.optString("due_at").ifBlank { null }, updatedAt = created, createdAt = created)
+                        }
+                        AugustJson.encodeToString(TaskMutation(task))
                     } else AugustJson.encodeToString(TasksResponse(saved.values.sortedBy { it.id }))
                     "/api/items" -> """{"items":[]}"""
+                    "/api/digest/synthesis" -> {
+                        if (request.requestUrl?.queryParameter("summary") != "1") {
+                            reflectionStarted.countDown()
+                            return MockResponse().setBody("""{"status":"unavailable","message":"Synthetic Gemini outage"}""")
+                                .setBodyDelay(2, java.util.concurrent.TimeUnit.SECONDS)
+                        }
+                        AugustJson.encodeToString(ReviewResponse("summary", selectedCount = 1, entries = listOf(
+                            Moment("synthetic-moment", "I sent the first prototype.", "Milestone_HardWork",
+                                eventTimestamp = now.toString(), createdAt = now.toString(), memory = Memory("The first prototype")),
+                        )))
+                    }
                     "/api/graph" -> """{"nodes":[],"links":[]}"""
                     else -> "{}"
                 }
@@ -132,13 +153,61 @@ class TasksIntegrationTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Tasks", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Tasks", useUnmergedTree = true).performClick()
         compose.onNodeWithContentDescription("Edit Build the test website").performScrollTo().performClick()
-        compose.onNodeWithText("Keep without a deadline").performClick()
+        compose.onNodeWithContentDescription("Remove deadline").performClick()
         compose.onNodeWithText("Save task").performClick()
         compose.waitUntil(10_000) { saved[id]?.dueAt == null && repository.state.value.cachedTasks.values.flatten().any { it.id == id && it.dueAt == null } }
         assertFalse(saved[id]!!.completed)
     }
 
-    @Test fun widgetDisplaysCachedTasksAndItsCheckButtonSavesCompletion() {
+    @Test fun reviewShowsSavedWeekBeforeAndAfterTheAiRequestFails() {
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Review", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Review", useUnmergedTree = true).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("1 saved moment").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("The first prototype").assertIsDisplayed()
+        compose.waitUntil(10_000) { reflectionStarted.count == 0L && compose.onAllNodesWithText("Reflection unavailable").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("The first prototype").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun widgetDisplaysCachedTasksAndItsCheckButtonSavesCompletion() = withWidget { widget, manager, widgetId ->
+        screenshot("tasks-widget.png")
+        manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 180) })
+        TaskWidget.render(context, repository.state.value)
+        compose.waitUntil(10_000) {
+            var count = 0
+            compose.runOnIdle { count = widget.findViewById<LinearLayout>(R.id.widget_tasks)?.childCount ?: 0 }
+            count == 1
+        }
+        compose.runOnIdle {
+            assertEquals("Build the test website", widget.findViewById<TextView>(R.id.widget_task_title).text.toString())
+            widget.findViewById<ImageButton>(R.id.widget_task_check).performClick()
+        }
+        compose.waitUntil(10_000) { saved[id]?.completed == true }
+        compose.waitUntil(10_000) { repository.state.value.cachedTasks.values.flatten().any { it.id == id && it.completed } }
+    }
+
+    @Test fun addingAnUndatedTaskUpdatesTheCompactWidgetImmediately() = withWidget(showApp = true) { widget, manager, widgetId ->
+        manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180) })
+        compose.runOnIdle { assertTrue(widget.findViewById<TextView>(R.id.widget_add).hasOnClickListeners()) }
+        compose.onNodeWithText("Tasks", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Add task").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("New task").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasSetTextAction() and hasText("Task title")).performTextInput("Send the design")
+        screenshot("tasks-quick-add.png")
+        compose.onAllNodesWithText("Add task").onLast().performClick()
+        compose.waitUntil(10_000) { saved.values.any { it.title == "Send the design" } }
+        compose.waitUntil(10_000) {
+            var shown = false
+            compose.runOnIdle {
+                val rows = widget.findViewById<LinearLayout>(R.id.widget_tasks)
+                shown = rows?.childCount == 1 &&
+                    rows.getChildAt(0).findViewById<TextView>(R.id.widget_task_title).text.toString() == "Send the design"
+            }
+            shown
+        }
+        assertTrue(saved.values.single { it.title == "Send the design" }.dueAt == null)
+    }
+
+    private fun withWidget(showApp: Boolean = false, run: (AppWidgetHostView, AppWidgetManager, Int) -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("appwidget grantbind --package ${context.packageName} --user 0")).use { it.readBytes() }
         val manager = AppWidgetManager.getInstance(context)
@@ -151,29 +220,22 @@ class TasksIntegrationTest {
             compose.runOnUiThread {
                 host.startListening()
                 widget = host.createView(context, widgetId, manager.getAppWidgetInfo(widgetId))
-                compose.activity.setContent { Box(Modifier.fillMaxSize().padding(20.dp)) { AndroidView(factory = { widget }, modifier = Modifier.fillMaxWidth().height(320.dp)) } }
+                compose.activity.setContent {
+                    Box(Modifier.fillMaxSize()) {
+                        AndroidView(factory = { widget }, modifier = Modifier.fillMaxWidth().height(320.dp))
+                        // Keep the widget host attached while the app creates a task.
+                        if (showApp) app.august.nativejournal.ui.AugustApp(androidx.lifecycle.viewmodel.compose.viewModel())
+                    }
+                }
             }
-            manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 300); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 350) })
+            manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 350); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 350) })
             TaskWidget.render(context, repository.state.value)
             compose.waitUntil(10_000) {
                 var count = 0
                 compose.runOnIdle { count = widget.findViewById<LinearLayout>(R.id.widget_tasks)?.childCount ?: 0 }
                 count > 0
             }
-            screenshot("tasks-widget.png")
-            manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 180) })
-            TaskWidget.render(context, repository.state.value)
-            compose.waitUntil(10_000) {
-                var count = 0
-                compose.runOnIdle { count = widget.findViewById<LinearLayout>(R.id.widget_tasks)?.childCount ?: 0 }
-                count == 1
-            }
-            compose.runOnIdle {
-                assertEquals("Build the test website", widget.findViewById<TextView>(R.id.widget_task_title).text.toString())
-                widget.findViewById<ImageButton>(R.id.widget_task_check).performClick()
-            }
-            compose.waitUntil(10_000) { saved[id]?.completed == true }
-            compose.waitUntil(10_000) { repository.state.value.cachedTasks.values.flatten().any { it.id == id && it.completed } }
+            run(widget, manager, widgetId)
         } finally { host.stopListening(); host.deleteAppWidgetId(widgetId) }
     }
 

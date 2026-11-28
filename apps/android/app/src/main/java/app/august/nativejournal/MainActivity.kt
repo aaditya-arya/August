@@ -27,6 +27,10 @@ class MainActivity : ComponentActivity() {
     }
     private fun receive(intent: Intent?) {
         if (intent?.getBooleanExtra("open_tasks", false) == true) { model.openTasks(); intent.removeExtra("open_tasks") }
+        if (intent?.action == "app.august.nativejournal.ADD_TASK") {
+            model.openTasks(add = true)
+            intent.action = null
+        }
         if (intent?.action == Intent.ACTION_VIEW && intent.data?.scheme == "augustnative") {
             model.authCallback(intent.data.toString())
             intent.data = null

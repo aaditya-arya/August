@@ -20,7 +20,7 @@ The installable development APK is `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Website download
 
-The website includes **Download for Android** on the public sign-in screen and in its navigation. The [0.4.0 preview APK](https://august-topaz.vercel.app/downloads/august-android-preview.apk) is available without signing in. The [release manifest](https://august-topaz.vercel.app/downloads/android-release.json) records its version, byte count, and SHA-256.
+The website includes **Download for Android** on the public sign-in screen and in its navigation. The [0.5.0 preview APK](https://august-topaz.vercel.app/downloads/august-android-preview.apk) is available without signing in. The [release manifest](https://august-topaz.vercel.app/downloads/android-release.json) records its version, byte count, and SHA-256. The app reads the public manifest from **Settings → App updates**. Each website release must retain the distributed APK's signing certificate for in-place updates.
 
 After a new debug build, run `npm run package:android` from the repository root. This copies the APK into `public/downloads` and regenerates the release metadata. Commit both files so the web host can serve the installer without needing an Android SDK during deployment. The website labels this as a development preview, installed as August Dev; it is not a Play Store release.
 
@@ -28,7 +28,7 @@ The debug app is labelled **August Dev**, with application ID `app.august.native
 
 ## Connect your existing journal
 
-Run the web backend from the repository root with `npm run dev:lan`, or use your deployed HTTPS backend. The LAN command prints addresses you can enter on your phone. Enter the correct origin on the native welcome screen, tap **Check connection**, then sign in:
+On first launch, **Continue with Google** connects to the public website automatically. For local development or a custom backend, choose **Use a different server**. The LAN command `npm run dev:lan` prints addresses you can enter on your phone:
 
 | Where the backend runs | Native server address |
 | --- | --- |
@@ -58,9 +58,9 @@ Google's authorized redirect URI remains the **Supabase** callback shown in its 
 - Google sign-in through the system browser/Custom Tabs with Supabase PKCE and token refresh.
 - Account-scoped writing drafts, stable retry identities, and a disabled editor while saving.
 - Searchable journal with category filters, expandable entries, and Android share-out.
-- Seven-day, thirty-day, and all-time source-backed reviews.
+- Seven-day, thirty-day, and all-time reviews. Saved moments appear first while Gemini prepares the source-backed reflection.
 - A checkmark Tasks tab with two-column grid/list layouts, undated and dated work, editable deadlines, completed filters, confirmation haptics, and Undo. Completions sync to the website and reviews.
-- A resizable **August Tasks** home-screen widget showing open tasks and deadlines, with direct completion and refresh. Add it from Tasks → **Reminders & widget**, or the launcher's widget picker.
+- Direct task entry with an optional deadline. The resizable **August Tasks** widget has a **+** to open quick add, checkboxes to complete tasks, and a refresh action. Successful task writes update the widget from the same account cache used by the app.
 - With notifications allowed, open tasks get reminders one day and one hour before their deadline when those times are still ahead. If both have passed, August schedules a reminder at the deadline. WorkManager persists reminders and periodically refreshes tasks while connected. Android battery restrictions can delay delivery. Completion, rescheduling, sign-out, and disabling reminders cancel the relevant pending jobs.
 - A bounded force-directed connections canvas with pinch zoom, pan, selection, category filters, and an accessible list. At most 120 nodes are drawn at once.
 - Incoming plain-text Android shares that the user can append to their draft before saving.

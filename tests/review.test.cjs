@@ -71,6 +71,8 @@ test('the primary reflection must ground both sides in exact quotes; invented co
   assert.ok(parseReviewFocus(value,entries,period));
   assert.throws(()=>parseReviewFocus({...value,after:{source_id:'bought',quote:'Bought it with my bonus'}},entries,period),/changed its quoted evidence/);
   assert.equal(parseReviewFocus({focus:null},entries,period),null);
+  assert.equal(parseReviewFocus({...value, question: ''}, entries, period).question, '');
+  assert.equal(parseSundayReview(report({ question: '' }), entries, period, 'UTC').question, '');
 });
 
 test('missing evidence is not completion and an unsupported year-end deadline is dropped', () => {

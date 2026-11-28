@@ -5,6 +5,24 @@ import { taskList, taskUpdate, toTask, TaskConflictError } from '@/lib/tasks';
 import { validTimezone } from '@/lib/time';
 import { errorMessage } from '@/lib/errors';
 import type { LedgerItem } from '@/lib/ledger';
+import { taskMetadata } from '@/lib/task-state';
+import { saveManualTask } from '@/lib/ingestion';
+
+export const POST = withAccount(async request => {
+  const body = await request.json().catch(() => null);
+  const task = taskMetadata({ version: 1, title: body?.title, due_at: body?.due_at ?? null });
+  const key = request.headers.get('Idempotency-Key');
+  if (!task || !key || key.length > 100) {
+    return Response.json({ error: 'Enter a task title and a valid deadline, if needed.' }, { status: 400 });
+  }
+  const timezone = validTimezone(body?.timezone) || 'UTC';
+  try {
+    const item = await saveManualTask(task, key, timezone);
+    return Response.json({ task: toTask(item, timezone) }, { status: 201 });
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 503 });
+  }
+});
 
 export const GET = withAccount(async request => {
   try {

@@ -23,7 +23,7 @@ export type SundayReview = {
 };
 export type ReviewPeriod = { days: "7" | "30" | "all"; start: string | null; end: string; label: string };
 export type ReviewResponse = {
-  review: SundayReview | null; status: "ready" | "unavailable"; period: ReviewPeriod;
+  review: SundayReview | null; status: "ready" | "unavailable" | "summary"; period: ReviewPeriod;
   intentions: ReviewIntention[]; entries: LedgerItem[]; selected_count: number;
   context_count: number; generated_at: string; message?: string;
 };
@@ -46,6 +46,9 @@ function text(value: unknown, max: number): string {
   if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error("Review returned invalid text.");
   return value.trim();
 }
+function reviewQuestion(value: unknown): string {
+  return typeof value === "string" && !value.trim() ? "" : text(value, 400);
+}
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid review object.");
   return value as Record<string, unknown>;
@@ -66,7 +69,7 @@ export function parseReviewFocus(value: unknown, allEntries: LedgerItem[], perio
     if (!ids.includes(id) || !entries.get(id)?.content.includes(quote)) throw new Error("The main reflection changed its quoted evidence.");
   }
   if (!ids.some(id => inReviewPeriod(entries.get(id)!, period))) throw new Error("The main reflection is outside the selected period.");
-  return { focus: { title: text(row.title, 120), meaning: text(row.meaning, 900), takeaway: text(row.takeaway, 700), source_ids: ids }, question: text(raw.question, 400) };
+  return { focus: { title: text(row.title, 120), meaning: text(row.meaning, 900), takeaway: text(row.takeaway, 700), source_ids: ids }, question: reviewQuestion(raw.question) };
 }
 
 export function parseSundayReview(value: unknown, allEntries: LedgerItem[], period: ReviewPeriod, timezone: string): SundayReview {
@@ -133,7 +136,7 @@ export function parseSundayReview(value: unknown, allEntries: LedgerItem[], peri
   const focus = raw.focus ? insight(raw.focus) : null;
   if (focus && !focus.source_ids.some((id) => selected.has(id))) throw new Error("The main reflection is outside the selected period.");
   return { opening: text(raw.opening, 600), focus, progress, experiences, lessons: section("lessons"), patterns: section("patterns").filter((item) => new Set(item.source_ids.map(id => localDay(new Date(entries.get(id)!.event_timestamp), timezone))).size > 1), intentions: validIntentions,
-    next_step: next, question: text(raw.question, 400) };
+    next_step: next, question: reviewQuestion(raw.question) };
 }
 
 /** Honest fallback/carry-forward candidates; absence of a log is never asserted as failure. */

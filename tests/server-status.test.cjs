@@ -49,8 +49,13 @@ test('a populated review reports missing AI configuration while an empty journal
     data.readReviewEntries = original;
     if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous;
   });
-  const { buildSundayReview } = require('../.test-build/review-service.js');
+  const { buildReviewSummary, buildSundayReview } = require('../.test-build/review-service.js');
   const review = () => runWithAccount({ userId: 'review-account', database: {} }, () => buildSundayReview('all', 'UTC'));
+  const summary = await buildReviewSummary('7');
+  assert.equal(summary.status, 'summary');
+  assert.equal(summary.selected_count, 1);
+  assert.equal(summary.review, null);
+  assert.equal(summary.entries[0].id, 'entry-a');
   const unavailable = await review();
   assert.equal(unavailable.status, 'unavailable');
   assert.match(unavailable.message, /GEMINI_API_KEY.*Production/);

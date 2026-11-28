@@ -12,6 +12,18 @@ const state = () => accountResource('review-service', () => ({
 }));
 export function lastReviewedIntentions() { return state().lastIntentions; }
 
+export async function buildReviewSummary(days: ReviewPeriod["days"], refresh = false): Promise<ReviewResponse> {
+  const now = new Date();
+  const period = reviewPeriod(days, now);
+  const entries = await readReviewEntries(refresh);
+  const selected = entries.filter(entry => inReviewPeriod(entry, period));
+  return {
+    review: null, status: "summary", period,
+    entries: selected.slice(0, 40), selected_count: selected.length, context_count: entries.length,
+    intentions: mergeIntentions(entries, []).slice(0, 12), generated_at: now.toISOString(),
+  };
+}
+
 export async function buildSundayReview(days: ReviewPeriod["days"], timezone: string, refresh = false): Promise<ReviewResponse> {
   const account = state();
   const { cache, pending } = account;
@@ -23,7 +35,15 @@ export async function buildSundayReview(days: ReviewPeriod["days"], timezone: st
   const work = (async (): Promise<ReviewResponse> => {
     const selected = entries.filter((entry) => inReviewPeriod(entry, period));
     const missingAiKey = selected.length > 0 && !process.env.GEMINI_API_KEY?.trim();
-    const generated = selected.length && !missingAiKey ? await generateSundayReview(entries, period, timezone, await readReviewSources(entries)) : null;
+    let generated = null;
+    if (selected.length && !missingAiKey) {
+      // The excerpts are enough to reflect if raw note context cannot be read.
+      const sources = await readReviewSources(entries).catch(() => []);
+      generated = await generateSundayReview(entries, period, timezone, sources).catch(error => {
+        console.warn("Review generation failed:", error instanceof Error ? error.name : "Unknown error");
+        return null;
+      });
+    }
     if (generated) account.lastIntentions = generated.intentions;
     const response: ReviewResponse = {
       review: generated, status: generated ? "ready" : "unavailable", period,

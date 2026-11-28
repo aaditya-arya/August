@@ -171,11 +171,12 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
         return saved
     }
 
-    suspend fun review(days: String, refresh: Boolean): ReviewResponse {
+    suspend fun review(days: String, refresh: Boolean, summary: Boolean = false): ReviewResponse {
         require(days in listOf("7", "30", "all"))
         return ServerJson.decodeFromString(authorized("/api/digest/synthesis", mapOf(
             "days" to days, "timezone" to ZoneId.systemDefault().id, "refresh" to if (refresh) "1" else "0",
-        ), timeoutSeconds = 300))
+            "summary" to if (summary) "1" else "0",
+        ), timeoutSeconds = if (summary) 30 else 175))
     }
 
     suspend fun graph(): GraphResponse = ServerJson.decodeFromString(authorized("/api/graph"))
@@ -193,22 +194,31 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
         return state.value.cachedTasks[key].orEmpty()
     }
 
-    suspend fun completeTask(id: String, completed: Boolean): JournalTask = patchTask(id, buildJsonObject { put("completed", completed) })
-    suspend fun editTask(id: String, title: String, dueAt: String?, expectedUpdatedAt: String? = null): JournalTask = patchTask(id, buildJsonObject {
+    suspend fun createTask(title: String, dueAt: String?, key: String): JournalTask = writeTask("POST", buildJsonObject {
+        put("title", title.trim())
+        dueAt?.let { put("due_at", it) }
+    }, key)
+
+    suspend fun completeTask(id: String, completed: Boolean): JournalTask = writeTask("PATCH", buildJsonObject {
+        put("item_id", id)
+        put("completed", completed)
+    })
+    suspend fun editTask(id: String, title: String, dueAt: String?, expectedUpdatedAt: String? = null): JournalTask = writeTask("PATCH", buildJsonObject {
+        put("item_id", id)
         put("title", title.trim()); put("due_at", dueAt?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
         expectedUpdatedAt?.let { put("expected_updated_at", it) }
     })
-    private suspend fun patchTask(id: String, patch: kotlinx.serialization.json.JsonObject): JournalTask {
+    private suspend fun writeTask(method: String, fields: kotlinx.serialization.json.JsonObject, retryKey: String? = null): JournalTask {
         val key = state.value.accountKey() ?: error("Sign in to update a task.")
         val expectedGeneration = generation
         taskWrites.incrementAndGet(); taskRevision.incrementAndGet()
         try {
-            val body = buildJsonObject { put("item_id", id); put("timezone", ZoneId.systemDefault().id); patch.forEach { (name, value) -> put(name, value) } }
-            val task = ServerJson.decodeFromString<TaskMutation>(authorized("/api/tasks", method = "PATCH", body = body.toString())).task
+            val body = buildJsonObject { put("timezone", ZoneId.systemDefault().id); fields.forEach { (name, value) -> put(name, value) } }
+            val task = ServerJson.decodeFromString<TaskMutation>(authorized("/api/tasks", method = method, body = body.toString(), retryKey = retryKey)).task
             checkAccount(key, expectedGeneration)
             change {
                 check(it.accountKey() == key && generation == expectedGeneration) { "The active account changed. Please try again." }
-                val tasks = (it.cachedTasks[key].orEmpty().filterNot { saved -> saved.id == id } + task).sortedBy { saved -> saved.id }
+                val tasks = (it.cachedTasks[key].orEmpty().filterNot { saved -> saved.id == task.id } + task).sortedBy { saved -> saved.id }
                 it.copy(cachedTasks = it.cachedTasks + (key to tasks))
             }
             return task
