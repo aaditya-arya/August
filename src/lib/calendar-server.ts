@@ -22,8 +22,8 @@ export async function getStoredTokens(): Promise<GoogleTokens | null> {
   return null;
 }
 
-export async function saveStoredTokens(tokens: GoogleTokens): Promise<void> {
-  const previous = await getStoredTokens();
+export async function saveStoredTokens(tokens: GoogleTokens, preserveRefresh = true): Promise<void> {
+  const previous = preserveRefresh ? await getStoredTokens() : null;
   const value = sealSession({ ...previous, ...tokens, userId: currentAccount().userId, refresh_token: tokens.refresh_token || previous?.refresh_token }, secret());
   if (value.length > 3800) throw new Error("Calendar session is too large to store.");
   (await cookies()).set(COOKIE, value, cookieOptions);
@@ -46,9 +46,23 @@ function redirectUri(origin?: string) {
 }
 
 export function getGoogleAuthUrl(state: string, origin?: string): string {
-  if (!process.env.GOOGLE_CLIENT_ID || !secret() || !state) throw new Error("Google Calendar OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your server environment.");
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !state) throw new Error("Google Calendar OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your server environment.");
   const params = new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: redirectUri(origin), response_type: "code", scope: "https://www.googleapis.com/auth/calendar.events", access_type: "offline", prompt: "consent", state });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+export function calendarConfigured() {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+export async function verifyCalendarConnection() {
+  const token = await getValidAccessToken();
+  if (!token) return { connected: false, reason: "reconnect" };
+  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=1&fields=kind", {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000), cache: "no-store",
+  });
+  if (response.ok) return { connected: true };
+  return { connected: false, reason: response.status === 401 ? "reconnect" : response.status === 403 ? "access" : "unavailable" };
 }
 
 type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; token_type?: string; scope?: string; error_description?: string; error?: string };
@@ -58,7 +72,7 @@ export async function exchangeCodeForTokens(code: string, origin?: string): Prom
     const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: process.env.GOOGLE_CLIENT_ID || "", client_secret: process.env.GOOGLE_CLIENT_SECRET || "", redirect_uri: redirectUri(origin), grant_type: "authorization_code" }), signal: AbortSignal.timeout(10000) });
     const data: TokenResponse = await response.json();
     if (!response.ok || !data.access_token) return { success: false, error: data.error_description || data.error || "Token exchange failed" };
-    await saveStoredTokens({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Date.now() + (data.expires_in || 3600) * 1000, token_type: data.token_type, scope: data.scope });
+    await saveStoredTokens({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Date.now() + (data.expires_in || 3600) * 1000, token_type: data.token_type, scope: data.scope }, false);
     return { success: true };
   } catch (error) { return { success: false, error: errorMessage(error) }; }
 }

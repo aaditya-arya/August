@@ -1,6 +1,6 @@
 # Google sign-in and saved progress
 
-The web and Android clients share Supabase accounts. Saved notes, extracted items, tasks, plans, and graph connections belong to the signed-in account. Android uses encrypted device storage for sessions and drafts. Browser drafts stay in that browser's local storage. Saving a moment makes the saved data available to that account on other devices. The backend and AI processing handle saved journal text.
+The web and Android clients share Supabase accounts. Saved notes, extracted items, tasks, plans, and graph connections belong to the signed-in account. The web editor autosaves its draft to Supabase as you write. Android uses encrypted device storage for sessions and drafts until you save a moment. Filed journal entries are available to the account on both platforms. The backend and AI processing handle saved journal text.
 
 The app code is ready for configuration. Live Google sign-in and account privacy are **not enabled until the following dashboard steps are complete**. The current public app key cannot administer your project. Do not paste Google client secrets or Supabase admin keys into chat or the mobile app.
 
@@ -71,6 +71,8 @@ The Kotlin client's callback pattern allows a per-attempt state query, validated
 
 For Calendar, add `https://august-topaz.vercel.app/api/auth/google/callback` to the Google web OAuth client's **Authorized redirect URIs**. This callback is separate from the Supabase callback used by **Continue with Google**. The Calendar routes use the incoming request origin to construct their callback.
 
+On the deployed web app, sign in and select **Connect Google Calendar**. Grant the requested access and wait for the connection notice after Google returns. The sidebar's **Check connection** can verify access again. Calendar is connected per browser session.
+
 Redeploy after changing variables. Production variables are scoped separately from Preview. An unconfigured preview can build and serve the APK, with sign-in unavailable. To test signed-in features on a preview, configure its public Supabase variables, the necessary server-side secrets, and that preview origin's allowed callback URLs. Prefer the public production URL for normal Android sign-in. A Vercel login page on a preview link can be caused by Deployment Protection. See [Vercel environment variables](https://vercel.com/docs/environment-variables) and [Deployment Protection](https://vercel.com/docs/deployment-protection).
 
 Check Vercel's deployment result for the most recent commit on the branch named in any failure email. An older failed deployment remains marked failed after a later commit builds successfully. If the latest build fails, open that deployment's build log and check its environment scope and first reported error.
@@ -94,7 +96,7 @@ For a signed-in test on Android, install the [latest website APK](ANDROID.md#ins
 
 ## 5. Recover earlier progress deliberately
 
-Browser and Android writing screens offer **Recover earlier draft** after sign-in when a pre-login draft exists. Recovery copies it into that account's draft and only removes the older draft after the copy is stored. Save the recovered writing to sync it.
+Browser and Android writing screens offer **Recover earlier draft** after sign-in when a pre-login draft exists. Web recovery uploads the older text to your signed-in account and removes the browser copy after its cloud save. Android recovery keeps the draft in encrypted device storage until you save the moment.
 
 For old cloud records, first sign in once so the correct account exists. In Supabase's SQL Editor, find your account ID using your verified email:
 

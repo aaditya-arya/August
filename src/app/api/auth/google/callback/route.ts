@@ -15,12 +15,17 @@ async function handleGET(request: Request) {
   const base = new URL(request.url).origin;
   const redirectError = (reason: string) => NextResponse.redirect(`${base}/?calendar=error&reason=${encodeURIComponent(reason)}`);
   if (!valid) return redirectError("invalid_state");
-  if (params.get("error")) return redirectError(params.get("error")!);
+  if (params.get("error")) return redirectError(params.get("error") === "access_denied" ? "denied" : "exchange");
   const code = params.get("code");
   if (!code) return redirectError("no_code");
   const result = await exchangeCodeForTokens(code, base);
-  if (!result.success) return redirectError(result.error || "exchange_failed");
+  if (!result.success) return redirectError("exchange");
   return NextResponse.redirect(`${base}/?calendar=connected`);
 }
 
-export const GET = withAccount(handleGET, { storage: false });
+const callback = withAccount(handleGET, { storage: false });
+export async function GET(request: Request) {
+  const result = await callback(request);
+  if (result.status === 401) return NextResponse.redirect(new URL("/?calendar=error&reason=session", request.url));
+  return result;
+}

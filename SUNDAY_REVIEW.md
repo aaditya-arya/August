@@ -20,6 +20,6 @@ Plans persist through `PATCH /api/intentions` as versioned `review_state` metada
 
 The Tasks tab and Android widget share that completion state with Sunday Review. Checking a task off moves it out of the active intentions list and records a completed plan. Undo reopens it. A task can have a deadline or stay open without one.
 
-The app-wide intentions strip shows time remaining and a relevant plan or wish. Sunday Review surfaces a small number of intentions first; the remainder can wait in a collapsed section. Paused, completed and released intentions leave the active list. A saved reflection becomes a normal ledger note, giving later reviews actual new evidence rather than a one-off generated page.
+Sunday Review surfaces a small number of intentions first, with the remainder in a collapsed section. Paused, completed and released intentions leave the active list. A saved reflection becomes a normal ledger note, giving later reviews new evidence.
 
 `npm test` covers source grounding, progress coverage, chronology, wish fulfilment, separate ambitions, unsupported deadlines, manual status, date rollover, unknown savings, plan normalisation and validation. `npm run test:review` checks a real model with synthetic source entries and makes no database or Calendar changes. Browser checks cover desktop/mobile layout, expandable evidence, planning controls and funding gaps. A temporary isolated database fixture verified that plan data survives API reloads and does not create a calendar action; it was removed and all original rows were verified unchanged.

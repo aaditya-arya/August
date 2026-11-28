@@ -6,6 +6,7 @@ import { Cloud, Feather, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import { browserAuthClient } from '@/lib/auth-browser';
 import { resetIntentions } from '@/lib/use-intentions';
 import { resetTasks } from '@/lib/use-tasks';
+import { flushCloudDraft } from '@/lib/use-cloud-draft';
 import { AndroidDownload } from './AndroidDownload';
 
 const Context = createContext<User | null>(null);
@@ -37,7 +38,17 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
       setUser(next); setLoading(false);
     };
     const { data: subscription } = client.auth.onAuthStateChange((_event, session) => change(session?.user || null));
-    client.auth.getSession().then(({ data, error }) => { if (active) { if (error) setError('Your session could not be restored. Please sign in again.'); else if (new URL(location.href).searchParams.get('auth') === 'failed') setError('Sign-in could not be completed. Please try again.'); change(data.session?.user || null); } }).catch(() => { if (active) { setError('Your session could not be restored. Please sign in again.'); setLoading(false); } });
+    client.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+      const query = new URLSearchParams(location.search);
+      if (error) setError('Your session could not be restored. Please sign in again.');
+      else if (query.get('auth') === 'failed') setError('Sign-in could not be completed. Please try again.');
+      else if (!data.session && query.get('calendar') === 'error' && query.get('reason') === 'session') {
+        setError('Your August session expired. Sign in, then connect Calendar again.');
+        history.replaceState(history.state, '', location.pathname);
+      }
+      change(data.session?.user || null);
+    }).catch(() => { if (active) { setError('Your session could not be restored. Please sign in again.'); setLoading(false); } });
     fetch('/api/auth/config').then(response => response.json()).then(config => { if (active) setGoogleEnabled(Boolean(config.googleEnabled)); }).catch(() => { if (active) setGoogleEnabled(false); });
     return () => { active = false; subscription.subscription.unsubscribe(); };
   }, [client]);
@@ -49,8 +60,13 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
     if (error) { setError('Google sign-in could not start. Please try again once account setup is complete.'); setBusy(false); }
   }
   async function signOut() {
-    if (!client) return;
-    setBusy(true);
+    if (!client || !user) return;
+    setBusy(true); setError(null);
+    if (!(await flushCloudDraft(user.id))) {
+      setError('Your latest draft is still in this tab. Resolve the cloud save before signing out.');
+      setBusy(false);
+      return;
+    }
     const { error } = await client.auth.signOut({ scope: 'local' });
     if (error) { setError('Sign-out failed. Please try again.'); setBusy(false); return; }
     // Reload to clear account-specific module caches as well as the route tree.

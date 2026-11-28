@@ -1,10 +1,11 @@
-import { IntentionsBar } from "@/components/IntentionsBar";
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { themeInitScript } from "@/lib/theme";
 import { AuthBoundary } from '@/components/AuthBoundary';
+import { CalendarNotice, CalendarProvider } from "@/components/CalendarConnection";
+import { CloudDraftProvider } from "@/components/CloudDraftProvider";
 
 const dmSans = localFont({
   src: "./fonts/dm-sans-latin-variable.woff2",
@@ -55,11 +56,16 @@ export default function RootLayout({
       </head>
       <body className="bg-background text-foreground min-h-screen flex flex-col md:flex-row selection:bg-rose-500/30 selection:text-rose-900 dark:selection:text-rose-200 antialiased">
         <AuthBoundary>
-        <Sidebar />
-        <main className="flex-1 min-w-0 relative min-h-screen bg-background md:h-dvh md:min-h-0 md:overflow-y-auto">
-          <IntentionsBar />
-          {children}
-        </main>
+          <CalendarProvider>
+            <CloudDraftProvider>
+              <a href="#journal-content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-surface focus:px-4 focus:py-3 focus:text-foreground">Skip to content</a>
+              <Sidebar />
+              <main id="journal-content" tabIndex={-1} className="flex-1 min-w-0 relative min-h-screen bg-background md:h-dvh md:min-h-0 md:overflow-y-auto">
+                <CalendarNotice />
+                {children}
+              </main>
+            </CloudDraftProvider>
+          </CalendarProvider>
         </AuthBoundary>
       </body>
     </html>

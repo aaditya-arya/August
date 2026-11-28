@@ -7,29 +7,28 @@ import {
   Network,
   CalendarDays,
   Folders,
-  Calendar,
   CheckCircle2,
-  ExternalLink,
   BookOpen,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AndroidDownload } from "@/components/AndroidDownload";
+import { CalendarControl } from "@/components/CalendarConnection";
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
 const navItems = [
-  { name: "Life Ledger", href: "/", icon: CalendarDays },
+  { name: "Journal", href: "/", icon: CalendarDays },
   { name: "Tasks", href: "/tasks", icon: CheckCircle2 },
   { name: "Sunday Review", href: "/digest", icon: BookOpen },
   { name: "Brain Graph", href: "/graph", icon: Network },
   { name: "Clusters & Search", href: "/clusters", icon: Folders },
 ];
 
-const DEFAULT_WIDTH = 256;
+const DEFAULT_WIDTH = 224;
 const MIN_WIDTH = 180;
 const COLLAPSE_THRESHOLD = 110;
 
@@ -44,7 +43,6 @@ function readWidth() {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null);
 
   // Sidebar Open / Width States
   const storedOpen = useSyncExternalStore(subscribePreferences, readOpen, () => true);
@@ -56,22 +54,6 @@ export function Sidebar() {
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const lastValidWidthRef = useRef(DEFAULT_WIDTH);
-
-  // Google Calendar Status check
-  useEffect(() => {
-    async function checkCalendarStatus() {
-      try {
-        const res = await fetch("/api/auth/google/status");
-        if (res.ok) {
-          const data = await res.json();
-          setCalendarConnected(data.connected);
-        }
-      } catch {
-        setCalendarConnected(false);
-      }
-    }
-    checkCalendarStatus();
-  }, [pathname]);
 
   // Toggle function with persistence
   const toggleSidebar = useCallback(() => {
@@ -195,13 +177,7 @@ export function Sidebar() {
           </Link>
           <div className="flex items-center gap-2">
             <AndroidDownload iconOnly />
-            <a
-              href="/api/auth/google"
-              aria-label={calendarConnected ? "Google Calendar connected" : "Connect Google Calendar"}
-              className="rounded-xl border border-border p-2.5 text-accent"
-            >
-              <Calendar size={16} />
-            </a>
+            <CalendarControl compact />
             <ThemeToggle compact />
           </div>
         </div>
@@ -258,11 +234,8 @@ export function Sidebar() {
             {/* Brand Header */}
             <div className="mb-8 flex items-center justify-between gap-4 px-3 mt-3">
               <Link href="/" className="inline-block group">
-                <h1 className="text-[28px] font-serif font-medium italic text-foreground tracking-tight flex items-center gap-2 group-hover:text-accent transition-colors">
+                <p className="text-[28px] font-serif font-medium italic text-foreground tracking-tight flex items-center gap-2 group-hover:text-accent transition-colors">
                   August
-                </h1>
-                <p className="text-[9px] font-sans text-muted uppercase tracking-[.16em] mt-1">
-                  Life Ledger & Mirror
                 </p>
               </Link>
             </div>
@@ -299,40 +272,7 @@ export function Sidebar() {
                 <ThemeToggle />
               </div>
 
-              <div className="bg-surface border border-border rounded-2xl p-3.5 mb-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <Calendar size={15} className="text-rose-500 dark:text-rose-400" />
-                    <span className="text-xs font-bold text-foreground">Google Calendar</span>
-                  </div>
-                  {calendarConnected ? (
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                  ) : null}
-                </div>
-                <p className="text-[11px] text-muted leading-snug mb-2.5">
-                  {calendarConnected
-                    ? "Auto-syncing reminders directly to your calendar."
-                    : "Connect to auto-sync reminders in background."}
-                </p>
-
-                {calendarConnected ? (
-                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-xl">
-                    <CheckCircle2 size={12} />
-                    <span>Auto-Sync Active</span>
-                  </div>
-                ) : (
-                  <a
-                    href="/api/auth/google"
-                    className="inline-flex items-center justify-center gap-1.5 w-full bg-rose-500/5 hover:bg-rose-500/10 text-foreground border border-border text-xs font-semibold py-1.5 px-2.5 rounded-xl transition-all shadow-xs active:scale-[0.98]"
-                  >
-                    <span>Connect Google</span>
-                    <ExternalLink size={11} />
-                  </a>
-                )}
-              </div>
+              <div className="mb-3"><CalendarControl /></div>
 
               <div className="h-px w-full bg-border mb-3" />
               <div className="flex items-center justify-between text-[10px] text-muted px-1">

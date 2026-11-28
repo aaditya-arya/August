@@ -11,6 +11,8 @@ npm run test:accounts:sql
 
 This test creates only an in-memory database. It applies the real base schema and migration twice, tests restrictive policies alongside old permissive policies, checks legacy preservation, and simulates two authenticated roles. It verifies anonymous denial, default ownership, rejected ownership changes, parent-note and graph-edge ownership, and vector-search isolation. It never connects to Supabase. Live Google OAuth and Android device behavior still require the end-to-end checks in [AUTH_SETUP.md](../AUTH_SETUP.md).
 
+`npm test` also exercises web draft revision conflicts, per-account draft isolation, and recovery after organization fails. The draft tests use simulated storage and AI responses.
+
 ## Tasks
 
 - `npm test` covers deadline validation, task eligibility, preserving Calendar metadata on completion, and stale review-cache reads. The SQL check above also verifies cross-account denial for task metadata updates.

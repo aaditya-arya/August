@@ -24,9 +24,17 @@ npm run check:supabase
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in. The same account and Supabase project provide the same saved journal entries. Unsaved drafts remain on their original device/browser, and Google Calendar must be connected in the new browser.
+Open [http://localhost:3000](http://localhost:3000) and sign in. The same account and Supabase project provide the same saved journal entries and web draft. Android keeps its draft on the device until you save. Connect Google Calendar in each browser where you want Calendar sync.
 
 There is no need to copy `node_modules`, `.next`, or generated Android/iOS folders. For production web hosting, configure the environment on the host and run `npm run build` followed by `npm start`, or use a Next.js-compatible hosting service.
+
+## Writing on the web
+
+Write in **Journal** after signing in. **Saved to cloud** means the latest text has reached your account. You can continue that draft in another browser signed into the same account. Keep the tab open while you're offline so pending edits can upload once you reconnect. If another tab changed the draft, the editor keeps your text visible and asks which version to use.
+
+Step away from the editor for about 15 seconds and August begins organizing the saved text into moments, tasks, reminders, and events. The receipt shows what was filed. Use **New entry** when you're ready to write again. If organization fails, your draft remains available and **Try again** retries it. **Text** adjusts size, typeface, and animation. **Focus** opens a full-screen editor, with Escape to return.
+
+**Connect Google Calendar** is separate from Google sign-in. After you return from Google, August checks Calendar access and reports the result. The sidebar shows the connection status and offers **Check connection**.
 
 ## Android
 

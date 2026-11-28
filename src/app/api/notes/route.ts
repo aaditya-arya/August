@@ -6,6 +6,8 @@ import { errorMessage } from "@/lib/errors";
 import { validTimezone } from "@/lib/time";
 import type { SaveNoteResponse } from "@august/shared";
 import { detectedEvents, taskList } from "@/lib/tasks";
+import { currentAccount } from "@/lib/account-context";
+import { webDraftId } from "@/lib/web-draft";
 
 export const maxDuration = 300;
 
@@ -26,13 +28,15 @@ async function handlePOST(request: Request) {
 
 async function handleGET(request: Request) {
   const id = new URL(request.url).searchParams.get("id");
+  const draftId = webDraftId(currentAccount().userId);
   if (id) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "A valid note is required." }, { status: 400 });
+    if (id.toLowerCase() === draftId) return NextResponse.json({ error: "This note no longer exists." }, { status: 404 });
     const { data, error } = await supabase.from("notes").select("id, content, created_at").eq("id", id).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return data ? NextResponse.json({ note: data }) : NextResponse.json({ error: "This note no longer exists." }, { status: 404 });
   }
-  const { data, error } = await supabase.from("notes").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("notes").select("*").neq("id", draftId).order("created_at", { ascending: false });
   return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ notes: data || [] });
 }
 

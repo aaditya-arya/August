@@ -1,284 +1,213 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowUpRight, Check, Feather, Heart, Leaf, Loader2, Maximize2, Minimize2, RefreshCw, Sparkles, AlignLeft, Type, Wind } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, Cloud, CloudOff, Maximize2, Minimize2, Plus, SlidersHorizontal } from "lucide-react";
+import { MAX_DRAFT_LENGTH } from "@/lib/web-draft-model";
+import { useJournalDraft } from "./CloudDraftProvider";
 import styles from "./WritingComposer.module.css";
-import { writingModes } from "@august/shared";
-import { useAccount } from './AuthBoundary';
 
-const modeIcons = [Feather, Heart, Wind, Sparkles];
+type Preferences = { size: number; face: "serif" | "sans"; still: boolean };
+const defaults: Preferences = { size: 20, face: "serif", still: false };
+const preferenceKey = "august-editor-preferences";
 
-const DRAFT_KEY = "august-writing-draft";
-const DRAFT_EVENT = "august-draft-change";
-const drafts = new Map<string, string>();
-
-function getDraft(key: string) {
-  if (!drafts.has(key)) {
-    try {
-      drafts.set(key, localStorage.getItem(key) || "");
-    } catch {
-      drafts.set(key, "");
-    }
-  }
-  return drafts.get(key)!;
-}
-
-function subscribeToDraft(callback: () => void) {
-  window.addEventListener(DRAFT_EVENT, callback);
-  return () => window.removeEventListener(DRAFT_EVENT, callback);
-}
-
-function updateDraft(key: string, value: string) {
-  drafts.set(key, value);
-  let persisted = true;
+function readPreferences(): Preferences {
   try {
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
-  } catch {
-    persisted = false;
-  }
-  window.dispatchEvent(new Event(DRAFT_EVENT));
-  return persisted;
+    const value = JSON.parse(localStorage.getItem(preferenceKey) || "null");
+    if (value && [18, 20, 23, 26].includes(value.size) && ["serif", "sans"].includes(value.face)) {
+      return { size: value.size, face: value.face, still: value.still === true };
+    }
+  } catch {}
+  return defaults;
 }
 
-const getServerDraft = () => "";
-
-type WritingComposerProps = {
-  onSave: (content: string) => Promise<void>;
-};
-
-export function WritingComposer({ onSave }: WritingComposerProps) {
-  const account = useAccount();
-  const draftKey = `${DRAFT_KEY}:${account.id}`;
-  const content = useSyncExternalStore(subscribeToDraft, () => getDraft(draftKey), getServerDraft);
-  const legacy = useSyncExternalStore(subscribeToDraft, () => getDraft(DRAFT_KEY), getServerDraft);
-  const [isFocused, setIsFocused] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [draftPersisted, setDraftPersisted] = useState(true);
-  const [modeIndex, setModeIndex] = useState(0);
-  const [promptIndex, setPromptIndex] = useState(0);
-  const [ruled, setRuled] = useState(true);
-  const [largeText, setLargeText] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const focusButtonRef = useRef<HTMLButtonElement>(null);
-  const savingRef = useRef(false);
-  const mounted = useRef(false);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+export function WritingComposer() {
+  const [focus, setFocus] = useState(false);
+  const [preferences, setPreferences] = useState(defaults);
+  const cloudDraft = useJournalDraft();
+  const { view, dirty, setEditorActive } = cloudDraft;
+  const section = useRef<HTMLElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const focusButton = useRef<HTMLButtonElement>(null);
+  const creatingEntry = useRef(false);
   const id = useId();
-  const wordCount = content.trim() ? content.trim().split(/\s+/u).length : 0;
-  const mode = writingModes[modeIndex];
-  const prompt = mode.prompts[promptIndex];
+  const filed = view.cloud?.status === "filed";
+  const organizing = view.busy === "organize" || view.cloud?.status === "organizing";
+  const receipt = view.cloud?.receipt;
+  const wordCount = view.content.trim() ? view.content.trim().split(/\s+/u).length : 0;
 
-  useLayoutEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    editor.style.height = "auto";
-    editor.style.height = `${editor.scrollHeight}px`;
-  }, [content, isFocused, largeText]);
+  useEffect(() => { queueMicrotask(() => setPreferences(readPreferences())); }, []);
+  useEffect(() => {
+    const blur = () => setEditorActive(false);
+    const restore = () => setEditorActive(Boolean(section.current?.contains(document.activeElement)));
+    window.addEventListener("blur", blur);
+    window.addEventListener("focus", restore);
+    document.addEventListener("focusin", restore);
+    return () => {
+      window.removeEventListener("blur", blur);
+      window.removeEventListener("focus", restore);
+      document.removeEventListener("focusin", restore);
+      setEditorActive(false);
+    };
+  }, [setEditorActive]);
 
   useEffect(() => {
-    if (!isFocused) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    // Isolate the editor at every ancestor, including the mobile navigation.
-    const backgroundElements: { element: HTMLElement; inert: boolean }[] = [];
-    let current: HTMLElement | null = sectionRef.current;
-    while (current && current !== document.body) {
-      const parent: HTMLElement | null = current.parentElement;
-      if (!parent) break;
+    if (!focus || !section.current) return;
+    const editor = section.current;
+    const background: { element: HTMLElement; inert: boolean }[] = [];
+    let current: HTMLElement | null = editor;
+    while (current?.parentElement && current !== document.body) {
+      const parent: HTMLElement = current.parentElement;
       for (const sibling of parent.children) {
         if (sibling instanceof HTMLElement && sibling !== current && !["SCRIPT", "STYLE", "LINK"].includes(sibling.tagName)) {
-          backgroundElements.push({ element: sibling, inert: sibling.inert });
-          sibling.inert = true;
+          background.push({ element: sibling, inert: sibling.inert });
+          sibling.setAttribute("inert", "");
         }
       }
       current = parent;
     }
-    editorRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    field.current?.focus({ preventScroll: true });
+    const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsFocused(false);
-        focusButtonRef.current?.focus({ preventScroll: true });
+        event.preventDefault();
+        setFocus(false);
+        requestAnimationFrame(() => focusButton.current?.focus({ preventScroll: true }));
+      } else if (event.key === "Tab") {
+        const controls = [...editor.querySelectorAll<HTMLElement>("button:not([disabled]), textarea:not([disabled]), summary, select, input")]
+          .filter(element => element.getClientRects().length > 0);
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first && last) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last && first) { event.preventDefault(); first.focus(); }
       }
     };
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", keyboard);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      backgroundElements.forEach(({ element, inert }) => { element.inert = inert; });
-      document.removeEventListener("keydown", onKeyDown);
+      background.forEach(({ element, inert }) => element.toggleAttribute("inert", inert));
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", keyboard);
     };
-  }, [isFocused]);
+  }, [focus]);
 
-  function usePrompt() {
-    const draft = getDraft(draftKey);
-    const next = `${draft.trimEnd()}${draft.trim() ? "\n\n" : ""}${prompt}\n`;
-    setDraftPersisted(updateDraft(draftKey, next));
-    setSaved(false);
-    setError(null);
-    requestAnimationFrame(() => {
-      editorRef.current?.focus();
-      editorRef.current?.setSelectionRange(next.length, next.length);
-    });
-  }
-
-  async function saveMoment() {
-    if (!content.trim() || savingRef.current) return;
-    savingRef.current = true;
-    setIsSaving(true);
-    setError(null);
-    setSaved(false);
-    const submittedContent = content;
-    try {
-      await onSave(submittedContent.trim());
-      if (!mounted.current) return;
-      // A new draft typed while the request is in flight belongs to the writer.
-      if (getDraft(draftKey) === submittedContent) updateDraft(draftKey, "");
-      setSaved(true);
-    } catch {
-      setError("Your moment couldn’t be saved. Your writing is still here—please try again.");
-    } finally {
-      savingRef.current = false;
-      setIsSaving(false);
+  useEffect(() => {
+    if (creatingEntry.current && !filed && !view.busy && !view.content) {
+      creatingEntry.current = false;
+      field.current?.focus();
     }
+  }, [filed, view.busy, view.content]);
+
+  function adjust(patch: Partial<Preferences>) {
+    const next = { ...preferences, ...patch };
+    setPreferences(next);
+    try { localStorage.setItem(preferenceKey, JSON.stringify(next)); } catch {}
   }
 
-  return (
-    <section
-      ref={sectionRef}
-      className={`${styles.studio} ${isFocused ? styles.focus : ""}`}
-      role={isFocused ? "dialog" : undefined}
-      aria-modal={isFocused ? true : undefined}
-      aria-labelledby={`${id}-title`}
-      onKeyDown={(event) => {
-        if (!isFocused || event.key !== "Tab") return;
-        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), textarea")).filter((element) => element.getClientRects().length > 0);
-        const first = controls[0];
-        const last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }}
-    >
-      <div className={styles.studioHeader}>
-        <div className={styles.modes} role="group" aria-label="Writing inspiration">
-          {writingModes.map((item, index) => {
-            const Icon = modeIcons[index];
-            return <button key={item.name} type="button" aria-pressed={modeIndex === index}
-              onClick={() => { setModeIndex(index); setPromptIndex(0); }} className={styles.mode}>
-              <Icon size={15} aria-hidden="true" /><span>{item.name}</span>
-            </button>;
-          })}
-        </div>
-        <span className={styles.headerNote}>A small ritual. All yours.</span>
-      </div>
+  function statusText() {
+    if (view.problem === "load") return "Cloud draft unavailable";
+    if (!view.ready) return "Opening cloud draft…";
+    if (view.conflict) return "Draft changed on another device";
+    if (dirty && view.offline) return "Offline · waiting to save";
+    if (view.problem === "save") return "Cloud save couldn’t finish";
+    if (dirty || view.busy === "save") return "Saving to cloud…";
+    if (organizing) return "Saved to cloud · organizing";
+    if (filed) return "In your journal";
+    if (view.content) return "Saved to cloud";
+    return "Cloud autosave on";
+  }
 
-      <form className={styles.paper} onSubmit={(event) => { event.preventDefault(); void saveMoment(); }}>
-        <div className={styles.toolbar}>
-          <span className={styles.pageLabel}><span className={styles.inkDot} /> TODAY’S PAGE</span>
-          <div className={styles.tools}>
-            <button type="button" aria-label="Show ruled lines" title="Show ruled lines" aria-pressed={ruled} onClick={() => setRuled(!ruled)} className={styles.iconButton}><AlignLeft size={16} aria-hidden="true" /></button>
-            <button type="button" aria-label="Larger writing text" title="Larger writing text" aria-pressed={largeText} onClick={() => setLargeText(!largeText)} className={styles.iconButton}><Type size={17} aria-hidden="true" /></button>
-            <span className={styles.toolDivider} />
-            <button
-              ref={focusButtonRef}
-              type="button"
-              aria-pressed={isFocused}
-              onClick={() => setIsFocused(!isFocused)}
-              className={styles.focusButton}
-            >
-              {isFocused ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-              {isFocused ? "Leave focus" : "Focus mode"}
-            </button>
-          </div>
-        </div>
+  const warning = view.conflict || view.offline || (view.problem && view.problem !== "organize");
+  const status = statusText();
+  const actions = receipt ? [
+    receipt.tasks && `${receipt.tasks} ${receipt.tasks === 1 ? "task" : "tasks"}`,
+    receipt.reminders && `${receipt.reminders} ${receipt.reminders === 1 ? "reminder" : "reminders"}`,
+    receipt.events && `${receipt.events} ${receipt.events === 1 ? "event" : "events"}`,
+    receipt.calendarEvents && `${receipt.calendarEvents} added to Google Calendar`,
+  ].filter(Boolean).join(" · ") : "";
 
-        <div className={styles.pageBody}>
-          <div className={styles.writingArea}>
-            <div className={styles.editorHeading}>
-              <label id={`${id}-title`} htmlFor={`${id}-editor`}>{mode.title}</label>
-              <span>No perfect words. Just yours.</span>
+  return <section
+    ref={section}
+    className={`${styles.sheet} ${focus ? styles.focus : ""}`}
+    data-still={preferences.still}
+    aria-label={focus ? "Focus editor" : "Journal editor"}
+    role={focus ? "dialog" : undefined}
+    aria-modal={focus ? true : undefined}
+    onBlurCapture={event => {
+      if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setEditorActive(false);
+    }}
+  >
+    <div className={styles.paper}>
+      <div className={styles.toolbar}>
+        <span className={styles.status} role="status">
+          {filed ? <Check className={styles.check} size={17} aria-hidden="true" /> : warning ? <CloudOff size={17} aria-hidden="true" /> : <Cloud size={17} aria-hidden="true" />}
+          <span>{status}</span>
+        </span>
+        <div className={styles.tools}>
+          <details className={styles.settings}>
+            <summary aria-label="Writing preferences" title="Writing preferences">
+              <SlidersHorizontal size={17} aria-hidden="true" /><span>Text</span>
+            </summary>
+            <div className={styles.panel}>
+              <label>Text size
+                <select value={preferences.size} onChange={event => adjust({ size: Number(event.target.value) })}>
+                  <option value={18}>Small</option><option value={20}>Default</option>
+                  <option value={23}>Large</option><option value={26}>Extra large</option>
+                </select>
+              </label>
+              <label>Typeface
+                <select value={preferences.face} onChange={event => adjust({ face: event.target.value as Preferences["face"] })}>
+                  <option value="serif">Serif</option><option value="sans">Sans serif</option>
+                </select>
+              </label>
+              <label className={styles.checkPreference}><input type="checkbox" checked={preferences.still} onChange={event => adjust({ still: event.target.checked })} /> Reduce animations</label>
             </div>
-            <textarea
-              ref={editorRef}
-              id={`${id}-editor`}
-              value={content}
-              aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
-              placeholder={mode.placeholder}
-              className={`${styles.editor} ${ruled ? styles.ruled : ""} ${largeText ? styles.largeText : ""}`}
-              onChange={(event) => {
-                setDraftPersisted(updateDraft(draftKey, event.target.value));
-                setSaved(false);
-                setError(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  void saveMoment();
-                }
-              }}
-            />
-          </div>
-
-          <aside className={styles.inspiration} aria-label="A little inspiration">
-            <div className={styles.botanical} aria-hidden="true">
-              <svg viewBox="0 0 180 150" fill="none">
-                <circle cx="92" cy="74" r="58" fill="currentColor" opacity=".06" />
-                <g stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M70 139C98 115 91 80 110 29M88 111C76 99 62 95 52 86M94 88C107 81 118 69 128 60M101 55C90 49 84 37 84 27" />
-                  <path d="M87 110C64 116 50 102 47 82C68 83 84 89 87 110Z" fill="currentColor" fillOpacity=".1" />
-                  <path d="M95 87C96 65 113 53 134 55C130 74 117 87 95 87Z" fill="currentColor" fillOpacity=".12" />
-                  <path d="M101 56C81 55 73 41 78 22C94 27 102 38 101 56Z" fill="currentColor" fillOpacity=".08" />
-                  <path d="M108 36C103 19 112 9 127 6C128 20 121 31 108 36Z" fill="currentColor" fillOpacity=".14" />
-                  <path d="M48 45V53M44 49H52M137 106V114M133 110H141" opacity=".5" />
-                </g>
-              </svg>
-            </div>
-            <p className={styles.promptEyebrow}>A LITTLE INSPIRATION</p>
-            <p className={styles.prompt} aria-live="polite">{prompt}</p>
-            <button type="button" onClick={usePrompt} className={styles.usePrompt}>Start with this <ArrowUpRight size={14} aria-hidden="true" /></button>
-            <button type="button" onClick={() => setPromptIndex((promptIndex + 1) % mode.prompts.length)} className={styles.nextPrompt}><RefreshCw size={12} aria-hidden="true" /> Another thought</button>
-          </aside>
-        </div>
-
-        <div className={styles.footer}>
-          <div className={styles.draftInfo}>
-            <p className={styles.draftStatus}>
-              {content ? <Check size={13} aria-hidden="true" /> : <Feather size={13} aria-hidden="true" />}
-              <span>{content ? (draftPersisted ? "Draft kept on this device" : "Draft kept in this tab") : "Every beginning counts"}</span>
-            </p>
-            <p id={`${id}-hint`} className={styles.shortcut}>
-              <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span><span aria-hidden="true">·</span>
-              <span><kbd>Ctrl / ⌘ + Enter</kbd> to save{isFocused ? " · Esc to leave focus" : ""}</span>
-            </p>
-          </div>
-          <button
-            type="submit"
-            disabled={!content.trim() || isSaving}
-            className={styles.saveButton}
-          >
-            {isSaving ? "Saving your moment…" : "Save moment"}
-            {isSaving ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <ArrowUpRight size={17} aria-hidden="true" />}
+          </details>
+          <button type="button" ref={focusButton} onClick={() => setFocus((value) => !value)} aria-pressed={focus} aria-label={focus ? "Exit focus mode" : "Focus mode"}>
+            {focus ? <Minimize2 size={17} aria-hidden="true" /> : <Maximize2 size={17} aria-hidden="true" />}
+            <span>{focus ? "Exit focus" : "Focus"}</span>
           </button>
         </div>
-        {error && <p id={`${id}-error`} role="alert" className="px-6 pb-5 text-sm text-rose-700 dark:text-rose-300 sm:px-10">{error}</p>}
-        {saved && <p role="status" className="flex items-center gap-2 px-6 pb-5 text-sm text-emerald-700 dark:text-emerald-300 sm:px-10"><Check size={15} /> Your moment has a home in your ledger.</p>}
-      </form>
-      <p className={styles.afterword}><Leaf size={13} aria-hidden="true" /> Some days, a sentence is enough.</p>
-      {!!legacy && <div className="mt-6 rounded-xl border border-border bg-surface p-4 text-xs leading-6 text-muted">
-        <p>A local draft from before sign-in is still on this device.</p>
-        <button type="button" disabled={isSaving} className="mt-2 text-accent underline disabled:opacity-50" onClick={() => {
-          const next = `${content.trimEnd()}${content.trim() ? '\n\n' : ''}${legacy}`;
-          if (updateDraft(draftKey, next)) { updateDraft(DRAFT_KEY, ''); setSaved(false); setError(null); }
-          else setError('The draft could not be stored. The original is still kept on this device.');
-        }}>Recover earlier draft</button>
+      </div>
+      <label htmlFor={id} className="sr-only">Journal entry</label>
+      <textarea
+        id={id}
+        ref={field}
+        className={`${styles.field} ${preferences.face === "sans" ? styles.sans : ""}`}
+        style={{ fontSize: `${preferences.size / 16}rem` }}
+        value={view.content}
+        maxLength={MAX_DRAFT_LENGTH}
+        onChange={event => cloudDraft.edit(event.target.value)}
+        disabled={!view.ready}
+        readOnly={filed || organizing || view.conflict}
+        placeholder="Start anywhere…"
+        aria-describedby={`${id}-hint`}
+        rows={11}
+      />
+      {view.conflict && <div className={styles.feedback} role="alert">
+        <p>Your text is still here. Choose which draft to continue with.</p>
+        <button type="button" onClick={() => { cloudDraft.useCloud(); field.current?.focus(); }}>Load cloud draft</button>
+        {(!view.cloud || view.cloud.status === "editing") && <button type="button" onClick={() => { cloudDraft.keepMine(); field.current?.focus(); }}>Keep my text</button>}
       </div>}
-    </section>
-  );
+      {view.problem && !view.conflict && <div className={styles.feedback} role="alert">
+        <p>{view.problem === "organize" ? "Your writing is in the cloud. August couldn’t organize the entry yet."
+          : view.problem === "load" ? "We couldn’t open your cloud draft." : "Keep this tab open until your changes reach the cloud."}</p>
+        <button type="button" onClick={cloudDraft.retry}>Try again</button>
+      </div>}
+      {view.offline && dirty && !view.problem && <p className={styles.feedback}>Keep this tab open. Autosave will resume when you reconnect.</p>}
+      {view.earlier && !view.content && !filed && (
+        view.earlier.length <= MAX_DRAFT_LENGTH ? <div className={styles.feedback}><button type="button" onClick={cloudDraft.recoverEarlier}>Recover earlier draft</button></div>
+        : <details className={styles.feedback}><summary>Copy earlier draft</summary><p>This draft is too long for one entry. Copy it in smaller sections.</p><pre>{view.earlier}</pre></details>
+      )}
+      <footer className={styles.footer}>
+        <p id={`${id}-hint`}>
+          {receipt ? <span className={styles.receipt} key={receipt.noteId}>{receipt.moments} {receipt.moments === 1 ? "moment" : "moments"} saved{actions ? ` · ${actions}` : ""}</span>
+            : view.content.length >= MAX_DRAFT_LENGTH ? "This entry reached its character limit. Step away to let August organize it."
+            : "Autosaves as you write. August organizes it when you step away."}
+        </p>
+        {filed ? <button className={styles.newEntry} type="button" onClick={() => {
+          creatingEntry.current = true;
+          cloudDraft.newEntry();
+        }} disabled={Boolean(view.busy)}><Plus size={16} aria-hidden="true" /> New entry</button> : <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>}
+      </footer>
+    </div>
+  </section>;
 }

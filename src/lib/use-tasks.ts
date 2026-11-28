@@ -58,8 +58,13 @@ export function useTasks() {
     void refreshTasks();
     const refresh = () => { if (document.visibilityState === 'visible') void refreshTasks(); };
     window.addEventListener('focus', refresh);
+    window.addEventListener('august-ledger-changed', refresh);
     const timer = window.setInterval(refresh, 60_000);
-    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('august-ledger-changed', refresh);
+      window.clearInterval(timer);
+    };
   }, []);
   return value;
 }
