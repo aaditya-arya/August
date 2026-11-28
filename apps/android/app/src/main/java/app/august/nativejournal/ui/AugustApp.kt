@@ -4,9 +4,10 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -20,21 +21,23 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.august.nativejournal.Destination
 import app.august.nativejournal.JournalViewModel
 import app.august.nativejournal.data.Moment
+import app.august.nativejournal.data.SaveResponse
 import app.august.nativejournal.data.accountKey
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +100,8 @@ fun AugustApp(model: JournalViewModel) {
                         initialPage = pages.indexOf(state.destination).coerceAtLeast(0),
                         pageCount = { pages.size },
                     )
+                    val canSwipe by remember(writing) { derivedStateOf { !writing && pager.currentPage != 3 } }
+                    var arrivedTab by remember { mutableStateOf<Destination?>(null) }
                     LaunchedEffect(state.destination) {
                         val index = pages.indexOf(state.destination)
                         if (index >= 0 && pager.currentPage != index) {
@@ -106,111 +114,121 @@ fun AugustApp(model: JournalViewModel) {
                         }
                     }
                     BackHandler(state.destination != Destination.Moments) { model.navigate(Destination.Moments) }
-                    Scaffold(
-                        topBar = {
-                            TopAppBar(
-                                title = {
-                                    AnimatedContent(
-                                        targetState = state.destination,
-                                        transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(110)) },
-                                        label = "TopBarTitle",
-                                    ) { destination ->
-                                        Text(when (destination) {
-                                            Destination.Moments, Destination.Tasks -> "August"
-                                            Destination.Write -> "New moment"
-                                            Destination.Review -> "Your review"
-                                            Destination.Graph -> "Connections"
-                                            Destination.Settings -> "Settings"
-                                        }, style = MaterialTheme.typography.titleLarge)
-                                    }
-                                },
-                                navigationIcon = {
-                                    androidx.compose.animation.AnimatedVisibility(
-                                        visible = writing,
-                                        enter = fadeIn(tween(180)) + expandHorizontally(),
-                                        exit = fadeOut(tween(120)) + shrinkHorizontally(),
-                                    ) {
-                                        val backInteraction = remember { MutableInteractionSource() }
-                                        IconButton(
-                                            onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.navigate(Destination.Moments) },
-                                            interactionSource = backInteraction,
-                                            modifier = Modifier.pressScale(backInteraction, targetScale = 0.90f),
-                                        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to journal") }
-                                    }
-                                },
-                                actions = {
-                                    if (state.preview) SuggestionChip(
-                                        onClick = { model.navigate(Destination.Settings) }, label = { Text("Sample journal") },
-                                    ) else androidx.compose.animation.AnimatedVisibility(
-                                        visible = state.destination == Destination.Moments,
-                                        enter = fadeIn(tween(160)),
-                                        exit = fadeOut(tween(120)),
-                                    ) {
-                                        val refreshInteraction = remember { MutableInteractionSource() }
-                                        IconButton(
-                                            onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.refreshMoments() },
-                                            enabled = !state.loadingMoments,
-                                            interactionSource = refreshInteraction,
-                                            modifier = Modifier.pressScale(refreshInteraction, targetScale = 0.90f),
-                                        ) { Icon(Icons.Default.Refresh, "Refresh moments") }
-                                    }
-                                    Spacer(Modifier.width(10.dp))
-                                },
-                                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                            )
-                        },
-                        bottomBar = {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = !writing,
-                                enter = slideInVertically(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(160)),
-                                exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(120)),
-                            ) {
-                                JournalNav(
-                                    destination = state.destination,
-                                    currentPage = pager.currentPage,
-                                    pageOffset = pager.currentPageOffsetFraction,
-                                    navigate = model::navigate,
+                    Box(Modifier.fillMaxSize()) {
+                        Scaffold(
+                            topBar = {
+                                TopAppBar(
+                                    title = {
+                                        AnimatedContent(
+                                            targetState = state.destination,
+                                            transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(100)) },
+                                            label = "TopBarTitle",
+                                        ) { destination ->
+                                            when (destination) {
+                                                Destination.Moments, Destination.Tasks -> Text(
+                                                    "August",
+                                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                                        fontFamily = FontFamily.Serif,
+                                                        fontStyle = FontStyle.Italic,
+                                                    ),
+                                                )
+                                                Destination.Write -> Text("New moment", style = MaterialTheme.typography.titleLarge)
+                                                Destination.Review -> Text("Your review", style = MaterialTheme.typography.titleLarge)
+                                                Destination.Graph -> Text("Connections", style = MaterialTheme.typography.titleLarge)
+                                                Destination.Settings -> Text("Settings", style = MaterialTheme.typography.titleLarge)
+                                            }
+                                        }
+                                    },
+                                    navigationIcon = {
+                                        androidx.compose.animation.AnimatedVisibility(
+                                            visible = writing,
+                                            enter = fadeIn(tween(180)) + expandHorizontally(),
+                                            exit = fadeOut(tween(120)) + shrinkHorizontally(),
+                                        ) {
+                                            IconButton(
+                                                onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.navigate(Destination.Moments) },
+                                            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to journal") }
+                                        }
+                                    },
+                                    actions = {
+                                        if (state.preview) SuggestionChip(
+                                            onClick = { model.navigate(Destination.Settings) }, label = { Text("Sample journal") },
+                                        ) else androidx.compose.animation.AnimatedVisibility(
+                                            visible = state.destination == Destination.Moments,
+                                            enter = fadeIn(tween(160)),
+                                            exit = fadeOut(tween(120)),
+                                        ) {
+                                            IconButton(
+                                                onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); model.refreshMoments(force = true) },
+                                                enabled = !state.loadingMoments,
+                                            ) { Icon(Icons.Default.Refresh, "Refresh moments") }
+                                        }
+                                        Spacer(Modifier.width(10.dp))
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                                 )
-                            }
-                        },
-                        snackbarHost = { SnackbarHost(snackbar) },
-                    ) { padding ->
-                        Box(Modifier.fillMaxSize().padding(padding)) {
-                            HorizontalPager(
-                                state = pager,
-                                beyondViewportPageCount = 1,
-                                userScrollEnabled = !writing && pager.currentPage != 3,
-                                modifier = Modifier.fillMaxSize(),
-                                key = { pages[it].name },
-                            ) { index ->
-                                val destination = pages[index]
-                                tabs.SaveableStateProvider(destination.name) {
-                                    when (destination) {
-                                        Destination.Moments -> MomentsScreen(
-                                            state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
-                                            retry = model::refreshMoments, dismissReceipt = model::dismissSaveReceipt, openTasks = model::openTasks,
-                                        )
-                                        Destination.Write -> Unit
-                                        Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
-                                        Destination.Tasks -> TasksScreen(
-                                            state, refresh = { model.refreshTasks() }, complete = model::completeTask, edit = model::editTask,
-                                            add = model::openTaskForm, reminders = model::taskReminders, write = { model.navigate(Destination.Write) },
-                                        )
-                                        Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
-                                        Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
+                            },
+                            bottomBar = {
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = !writing,
+                                    enter = slideInVertically(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(140)),
+                                    exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(100)),
+                                ) {
+                                    JournalNav(
+                                        destination = state.destination,
+                                        arrivedTab = arrivedTab,
+                                        navigate = model::navigate,
+                                    )
+                                }
+                            },
+                            snackbarHost = { SnackbarHost(snackbar) },
+                        ) { padding ->
+                            Box(Modifier.fillMaxSize().padding(padding)) {
+                                HorizontalPager(
+                                    state = pager,
+                                    beyondViewportPageCount = 1,
+                                    userScrollEnabled = canSwipe,
+                                    modifier = Modifier.fillMaxSize(),
+                                    key = { pages[it].name },
+                                ) { index ->
+                                    val destination = pages[index]
+                                    tabs.SaveableStateProvider(destination.name) {
+                                        when (destination) {
+                                            Destination.Moments -> MomentsScreen(
+                                                state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
+                                                retry = { model.refreshMoments(force = true) }, dismissReceipt = model::dismissSaveReceipt, openTasks = model::openTasks,
+                                            )
+                                            Destination.Write -> Unit
+                                            Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
+                                            Destination.Tasks -> TasksScreen(
+                                                state, refresh = { model.refreshTasks(restart = true) }, complete = model::completeTask, edit = model::editTask,
+                                                add = model::openTaskForm, reminders = model::taskReminders, write = { model.navigate(Destination.Write) },
+                                            )
+                                            Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
+                                            Destination.Settings -> SettingsScreen(
+                                                state, appearance = model::appearance, signOut = model::signOut,
+                                                checkServices = model::checkServices, sync = { model.syncFromCloud(force = true) },
+                                            )
+                                        }
+                                    }
+                                }
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = writing,
+                                    enter = slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(180)),
+                                    exit = slideOutHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(140)),
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                                        WriteScreen(state, edit = model::edit, save = model::save)
                                     }
                                 }
                             }
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = writing,
-                                enter = slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(tween(180)),
-                                exit = slideOutHorizontally(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(tween(140)),
-                                modifier = Modifier.fillMaxSize(),
-                            ) {
-                                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                                    WriteScreen(state, edit = model::edit, save = model::save)
-                                }
-                            }
+                        }
+                        if (!writing) {
+                            SavedPassageFlightOverlay(
+                                savedNote = state.savedNote,
+                                onArrive = { arrivedTab = it },
+                            )
                         }
                     }
                 }
@@ -251,8 +269,7 @@ fun AugustApp(model: JournalViewModel) {
 @Composable
 private fun JournalNav(
     destination: Destination,
-    currentPage: Int,
-    pageOffset: Float,
+    arrivedTab: Destination?,
     navigate: (Destination) -> Unit,
 ) {
     val tabs = remember {
@@ -265,74 +282,188 @@ private fun JournalNav(
         )
     }
     val haptics = LocalHapticFeedback.current
-    val currentDestination by rememberUpdatedState(destination)
-    val currentNavigate by rememberUpdatedState(navigate)
-    val position = (currentPage + pageOffset).coerceIn(0f, (tabs.size - 1).toFloat())
-    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-        Surface(
-            Modifier.widthIn(max = 520.dp).fillMaxWidth(), shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-            shadowElevation = 6.dp,
-        ) {
-            BoxWithConstraints(
-                Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp)
-                    .pointerInput(tabs.size) {
-                        detectHorizontalDragGestures(
-                            onHorizontalDrag = { change, _ ->
-                                change.consume()
-                                val index = ((change.position.x / size.width.coerceAtLeast(1)) * tabs.size).toInt().coerceIn(0, tabs.lastIndex)
-                                if (tabs[index].first != currentDestination) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    currentNavigate(tabs[index].first)
-                                }
-                            },
-                        )
-                    },
+    val palette = MaterialTheme.colorScheme
+    Surface(
+        color = palette.surfaceContainer,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            HorizontalDivider(thickness = 1.dp, color = palette.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 6.dp).selectableGroup(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                val tabWidth = maxWidth / tabs.size
-                Box(
-                    Modifier.offset(x = tabWidth * position)
-                        .width(tabWidth)
-                        .height(50.dp)
-                        .padding(horizontal = 3.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                )
-                Row(Modifier.fillMaxWidth().selectableGroup()) {
-                    tabs.forEach { (target, label, icon) ->
-                        val selected = target == destination
-                        val iconScale by animateFloatAsState(
-                            targetValue = if (selected) 1.12f else 1f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                            label = "NavIconScale",
-                        )
-                        Column(
-                            Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(24.dp))
-                                .selectable(selected, role = Role.Tab, onClick = {
+                tabs.forEach { (target, label, icon) ->
+                    val selected = target == destination
+                    val arriving = arrivedTab == target
+                    val pillColor by animateColorAsState(
+                        targetValue = when {
+                            arriving -> palette.primary.copy(alpha = 0.24f)
+                            selected -> palette.primaryContainer
+                            else -> Color.Transparent
+                        },
+                        animationSpec = tween(180),
+                        label = "NavPillColor",
+                    )
+                    val contentColor = if (selected || arriving) palette.primary else palette.onSurfaceVariant
+                    val interaction = remember { MutableInteractionSource() }
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight()
+                            .selectable(
+                                selected = selected,
+                                role = Role.Tab,
+                                interactionSource = interaction,
+                                indication = null,
+                                onClick = {
                                     if (!selected) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     navigate(target)
-                                }),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                                },
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Box(
+                            Modifier.width(52.dp).height(30.dp).clip(RoundedCornerShape(15.dp)).background(pillColor),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                icon, null,
-                                Modifier.size(19.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale },
-                                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Icon(icon, null, Modifier.size(20.dp), tint = contentColor)
                         }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+private data class FlightSpec(
+    val label: String,
+    val target: Destination,
+    val tabIndex: Int,
+    val bg: Color,
+    val ink: Color,
+    val delayMs: Int,
+)
+
+@Composable
+private fun SavedPassageFlightOverlay(
+    savedNote: SaveResponse?,
+    onArrive: (Destination?) -> Unit,
+) {
+    var animatedNoteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeFlights by remember { mutableStateOf<List<FlightSpec>>(emptyList()) }
+
+    LaunchedEffect(savedNote?.noteId) {
+        val receipt = savedNote ?: return@LaunchedEffect
+        if (receipt.noteId == animatedNoteId) return@LaunchedEffect
+        animatedNoteId = receipt.noteId
+        val items = buildList {
+            receipt.tasks.take(2).forEach { task ->
+                add(FlightSpec(task.title, Destination.Tasks, 1, Color(0xFFC3E5F8), Color(0xFF193C54), size * 210))
+            }
+            receipt.events.take(1).forEach { event ->
+                add(FlightSpec(event.title, Destination.Tasks, 1, Color(0xFFBCD9FF), Color(0xFF193C54), size * 210))
+            }
+            val remaining = receipt.extractedCount - receipt.tasks.size - receipt.events.size
+            if (remaining > 0 && size < 4) {
+                add(FlightSpec("$remaining saved", Destination.Review, 2, Color(0xFFFFD0DF), Color(0xFF5E2135), size * 210))
+            }
+        }.take(4)
+        if (items.isNotEmpty()) {
+            activeFlights = items
+            delay(1800)
+            onArrive(null)
+            activeFlights = emptyList()
+        }
+    }
+
+    if (activeFlights.isEmpty()) return
+
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val heightPx = with(density) { maxHeight.toPx() }
+        val navY = heightPx - with(density) { 42.dp.toPx() }
+        activeFlights.forEach { item ->
+            val progress = remember(animatedNoteId, item.label, item.delayMs) { Animatable(0f) }
+            LaunchedEffect(animatedNoteId, item.label, item.delayMs) {
+                delay(item.delayMs.toLong())
+                progress.animateTo(1f, tween(920, easing = FastOutSlowInEasing))
+                onArrive(item.target)
+            }
+            val startX = widthPx * 0.16f
+            val startY = heightPx * (0.28f + (item.delayMs / 210) * 0.045f)
+            val endX = (widthPx / 5f) * (item.tabIndex + 0.5f) - with(density) { 54.dp.toPx() }
+            val endY = navY
+            val ctrlX = (startX + endX) * 0.5f + with(density) { 28.dp.toPx() }
+            val ctrlY = minOf(startY, endY) - with(density) { 86.dp.toPx() }
+
+            fun bezier(t: Float): Pair<Float, Float> {
+                val u = 1f - t
+                val x = u * u * startX + 2f * u * t * ctrlX + t * t * endX
+                val y = u * u * startY + 2f * u * t * ctrlY + t * t * endY
+                return x to y
+            }
+
+            listOf(0.14f, 0.07f).forEachIndexed { idx, lag ->
+                Box(
+                    Modifier
+                        .size((14 + idx * 4).dp)
+                        .graphicsLayer {
+                            val p = (progress.value - lag).coerceIn(0f, 1f)
+                            val (x, y) = bezier(p)
+                            translationX = x + 28f
+                            translationY = y + 8f
+                            alpha = if (progress.value <= 0.02f || p >= 0.96f) 0f else (1f - idx * 0.25f) * 0.55f * (1f - p)
+                            val s = 1f - p * 0.4f
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .clip(CircleShape)
+                        .background(item.bg),
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = item.bg,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .widthIn(max = 180.dp)
+                    .graphicsLayer {
+                        val t = progress.value
+                        val (x, y) = bezier(t)
+                        translationX = x
+                        translationY = y
+                        val s = if (t < 0.18f) 0.88f + (t / 0.18f) * 0.2f else 1.08f - ((t - 0.18f) / 0.82f) * 0.82f
+                        scaleX = s
+                        scaleY = s
+                        alpha = when {
+                            t <= 0.02f -> 0f
+                            t < 0.12f -> t / 0.12f
+                            t > 0.82f -> (1f - t) / 0.18f
+                            else -> 1f
+                        }.coerceIn(0f, 1f)
+                    },
+            ) {
+                Text(
+                    item.label,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = item.ink,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

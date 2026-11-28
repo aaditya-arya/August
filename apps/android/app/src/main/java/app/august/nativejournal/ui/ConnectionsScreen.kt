@@ -9,15 +9,16 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -154,18 +155,19 @@ fun ConnectionsScreen(state: JournalUiState, refresh: () -> Unit, selectedMoment
                     Text(node.name, style = MaterialTheme.typography.titleMedium)
                     if (node.tags.isNotEmpty()) Text(node.tags.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.bodySmall)
                     momentsById[node.id]?.let { moment ->
-                        val openInteraction = remember { MutableInteractionSource() }
-                        FilledTonalButton(onClick = { selectedMoment(moment) }, interactionSource = openInteraction,
-                            modifier = Modifier.pressScale(openInteraction)) { Text("Open full moment") }
+                        FilledTonalButton(onClick = { selectedMoment(moment) }, shape = RoundedCornerShape(14.dp)) { Text("Open full moment") }
                     }
                 }
             }
         } }
         if (placed.isNotEmpty()) item { Text("Explore the moments", style = MaterialTheme.typography.titleLarge) }
         items(placed, key = { it.node.id }) { position ->
-            val cardInteraction = remember { MutableInteractionSource() }
-            OutlinedCard(onClick = { selectedId = position.node.id }, interactionSource = cardInteraction,
-                modifier = Modifier.animateItem().fillMaxWidth().pressScale(cardInteraction, targetScale = 0.98f)) {
+            OutlinedCard(
+                onClick = { selectedId = position.node.id },
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.animateItem().fillMaxWidth(),
+            ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(categoryLabel(position.node.group), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     Text(momentsById[position.node.id]?.memory?.title?.takeIf { it.isNotBlank() } ?: position.node.name,

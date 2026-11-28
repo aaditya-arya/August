@@ -1,8 +1,6 @@
 package app.august.nativejournal.ui
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,14 +9,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -29,51 +21,51 @@ import app.august.nativejournal.data.SaveResponse
 import app.august.nativejournal.tasks.TaskRuntime
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun JournalDashboard(state: JournalUiState, write: () -> Unit, openTasks: () -> Unit) {
     val today = LocalDate.now()
     val open = state.tasks.count { !it.completed }
-    val shape = RoundedCornerShape(34.dp)
-    Box(
-        Modifier.fillMaxWidth().clip(shape).background(
-            Brush.linearGradient(listOf(Color(0xFF141636), Color(0xFF253B83), Color(0xFF2166A0))),
-        ),
+    val palette = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        color = palette.surfaceContainerLow,
+        border = BorderStroke(1.dp, palette.outlineVariant),
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            val center = Offset(size.width * 1.12f, size.height * .17f)
-            repeat(6) { index ->
-                drawCircle(Color(0xFF9CE2C7).copy(alpha = .17f), size.width * (.30f + index * .075f), center, style = Stroke(1.dp.toPx()))
-            }
-        }
-        Column(Modifier.fillMaxWidth().padding(25.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            Text(today.format(DateTimeFormatter.ofPattern("EEE, MMM d")), color = Color(0xFFE4EBFF),
-                style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text(
+                today.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")),
+                color = palette.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+            )
             Text(
                 if (state.draft.isBlank()) "What's on your mind?" else "Your draft is waiting",
-                color = Color.White, style = MaterialTheme.typography.displayMedium,
+                color = palette.onSurface,
+                style = MaterialTheme.typography.displaySmall.copy(fontFamily = FontFamily.Serif),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                val writeInteraction = remember { MutableInteractionSource() }
                 Button(
                     onClick = write,
-                    interactionSource = writeInteraction,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1FAF4), contentColor = Color(0xFF153C36)),
-                    modifier = Modifier.pressScale(writeInteraction, targetScale = 0.95f).semantics { contentDescription = "Write a moment" },
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = palette.primary, contentColor = palette.onPrimary),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                    modifier = Modifier.semantics { contentDescription = "Write a moment" },
                 ) {
                     Text(if (state.draft.isBlank()) "Start writing" else "Continue draft")
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp))
                 }
                 if (open > 0) {
-                    val openInteraction = remember { MutableInteractionSource() }
-                    TextButton(
+                    FilledTonalButton(
                         onClick = openTasks,
-                        interactionSource = openInteraction,
-                        modifier = Modifier.pressScale(openInteraction, targetScale = 0.95f),
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDCF4E9)),
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = palette.primaryContainer,
+                            contentColor = palette.onPrimaryContainer,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     ) { Text("$open open") }
                 }
             }
@@ -90,8 +82,12 @@ internal fun NoteReceipt(receipt: SaveResponse, state: JournalUiState, dismiss: 
         !item.completed && item.dueAt?.let { runCatching { Instant.parse(it).isAfter(Instant.now()) }.getOrDefault(false) } == true
     }
     val notificationsOff = hasFutureDate && (!state.device.taskRemindersEnabled || !TaskRuntime.canNotify(context))
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
         Column(Modifier.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -4,13 +4,12 @@ import android.content.Intent
 import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,14 +22,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +47,7 @@ import app.august.nativejournal.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MomentsScreen(
     state: JournalUiState, selected: (Moment) -> Unit, write: () -> Unit, retry: () -> Unit,
@@ -57,61 +65,120 @@ fun MomentsScreen(
     LaunchedEffect(state.savedNote?.noteId) {
         if (state.savedNote != null) list.scrollToItem(1)
     }
-    LazyColumn(state = list, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { JournalDashboard(state, write, openTasks) }
-        state.savedNote?.let { receipt -> item(key = "receipt:${receipt.noteId}") { NoteReceipt(receipt, state, dismissReceipt, openTasks) } }
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Recent moments", Modifier.weight(1f), style = plannerTitle())
-                IconButton(onClick = { searching = !searching; if (!searching) { query = ""; category = null } }) {
-                    Icon(if (searching) Icons.Default.Close else Icons.Default.Search, if (searching) "Hide search" else "Search moments")
+    PullToRefreshBox(
+        isRefreshing = state.loadingMoments && state.moments.isNotEmpty() && !state.preview,
+        onRefresh = { if (!state.preview) retry() },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyColumn(state = list, modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item { JournalDashboard(state, write, openTasks) }
+            state.savedNote?.let { receipt -> item(key = "receipt:${receipt.noteId}") { NoteReceipt(receipt, state, dismissReceipt, openTasks) } }
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Recent moments", Modifier.weight(1f), style = plannerTitle())
+                    IconButton(onClick = { searching = !searching; if (!searching) { query = ""; category = null } }) {
+                        Icon(if (searching) Icons.Default.Close else Icons.Default.Search, if (searching) "Hide search" else "Search moments")
+                    }
                 }
             }
-        }
-        if (searching) item {
-            OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Find a moment, person, or idea") },
-                leadingIcon = { Icon(Icons.Default.Search, null) }, trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") } },
-                singleLine = true, shape = RoundedCornerShape(28.dp))
-        }
-        if (searching && categories.isNotEmpty()) item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FilterChip(selected = category == null, onClick = { category = null }, label = { Text("All moments") }) }
-                items(categories) { value -> FilterChip(selected = category == value, onClick = { category = if (category == value) null else value }, label = { Text(categoryLabel(value)) }) }
+            if (searching) item {
+                OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Find a moment, person, or idea") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) }, trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") } },
+                    singleLine = true, shape = RoundedCornerShape(28.dp))
+            }
+            if (searching && categories.isNotEmpty()) item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = category == null, onClick = { category = null }, label = { Text("All moments") }) }
+                    items(categories) { value -> FilterChip(selected = category == value, onClick = { category = if (category == value) null else value }, label = { Text(categoryLabel(value)) }) }
+                }
+            }
+            if (state.loadingMoments && state.moments.isEmpty()) item { LoadingCard("Opening your journal", "Your saved moments will appear here.") }
+            state.momentsError?.let { message -> item { RequestError("Couldn't load your journal", message, retry) } }
+            if (filtered.isEmpty() && !state.loadingMoments && state.momentsError == null) item {
+                EmptyState(if (state.moments.isEmpty()) "Start with something small." else "No matching moments",
+                    if (state.moments.isEmpty()) "A sentence is enough. Your journal grows one moment at a time." else "Try a different word or category.",
+                    if (state.moments.isEmpty()) "Write your first moment" else null, write)
+            }
+            filtered.groupBy { momentDay(it.eventTimestamp) }.forEach { (day, moments) ->
+                item(key = "day:$day") { Text(day, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.animateItem().padding(top = 8.dp)) }
+                items(moments, key = { it.id }) { moment -> MomentCard(moment, modifier = Modifier.animateItem()) { selected(moment) } }
             }
         }
-        if (state.loadingMoments) item { LoadingCard("Opening your journal", "Your saved moments will appear here.") }
-        state.momentsError?.let { message -> item { RequestError("Couldn't load your journal", message, retry) } }
-        if (filtered.isEmpty() && !state.loadingMoments && state.momentsError == null) item {
-            EmptyState(if (state.moments.isEmpty()) "Start with something small." else "No matching moments",
-                if (state.moments.isEmpty()) "A sentence is enough. Your journal grows one moment at a time." else "Try a different word or category.",
-                if (state.moments.isEmpty()) "Write your first moment" else null, write)
+    }
+}
+
+private val sentenceRegex = Regex("""[^.!?\n]+(?:[.!?]+|\n)""")
+private val cancelledRegex = Regex("""\b(cancelled|canceled|skipped|skipping|someday|might buy|wish i had)\b""", RegexOption.IGNORE_CASE)
+private val eventRegex = Regex("""\b(meeting|appointment|conference|dentist|doctor|interview|flight|dinner with)\b""", RegexOption.IGNORE_CASE)
+private val datedEventRegex = Regex("""\b(tomorrow|next\s+(?:mon|tue|wed|thu|fri|sat|sun)\w*)\b.*\b(\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)|at\s+\d)""", RegexOption.IGNORE_CASE)
+private val workRegex = Regex("""\b(remind me|need to|have to|must|working on|building a|finish|submit|pay the|call the|deadline|due\s+(?:by|on|tomorrow))\b""", RegexOption.IGNORE_CASE)
+private val feelingRegex = Regex("""\b(feel|felt|feeling|happy|sad|grateful|anxious|lonely|proud|overwhelmed|calm|peaceful|rushed|stressed|relieved|excited|angry|hurt|loved|missed|quiet walk|heart)\b""", RegexOption.IGNORE_CASE)
+
+private class PassageHighlightTransformation(private val dark: Boolean) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        if (raw.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
+        val annotated = buildAnnotatedString {
+            append(raw)
+            sentenceRegex.findAll(raw).forEach { match ->
+                val line = match.value.trim()
+                if (line.isEmpty()) return@forEach
+                val end = match.range.first + match.value.trimEnd('\n', '\r').length
+                if (end <= match.range.first) return@forEach
+                val cancelled = cancelledRegex.containsMatchIn(line)
+                val color = when {
+                    !cancelled && (eventRegex.containsMatchIn(line) || datedEventRegex.containsMatchIn(line)) ->
+                        if (dark) Color(0x4D7AB8FF) else Color(0xFFBCD9FF)
+                    !cancelled && workRegex.containsMatchIn(line) ->
+                        if (dark) Color(0x4D7CC8F8) else Color(0xFFC3E5F8)
+                    feelingRegex.containsMatchIn(line) ->
+                        if (dark) Color(0x4DE89AB5) else Color(0xFFFFD0DF)
+                    else -> null
+                }
+                color?.let { addStyle(SpanStyle(background = it), match.range.first, end) }
+            }
         }
-        filtered.groupBy { momentDay(it.eventTimestamp) }.forEach { (day, moments) ->
-            item(key = "day:$day") { Text(day, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.animateItem().padding(top = 8.dp)) }
-            items(moments, key = { it.id }) { moment -> MomentCard(moment, modifier = Modifier.animateItem()) { selected(moment) } }
-        }
+        return TransformedText(annotated, OffsetMapping.Identity)
     }
 }
 
 @Composable
 fun WriteScreen(state: JournalUiState, edit: (String) -> Unit, save: () -> Unit) {
+    val palette = MaterialTheme.colorScheme
+    val dark = palette.background.red < 0.5f
+    val highlighter = remember(dark) { PassageHighlightTransformation(dark) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("Your page", style = MaterialTheme.typography.displayMedium)
-        OutlinedTextField(state.draft, edit, modifier = Modifier.fillMaxWidth().heightIn(min = 330.dp),
-            enabled = !state.saving, placeholder = { Text("Start anywhere...", style = MaterialTheme.typography.bodyLarge) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 22.sp, lineHeight = 34.sp), shape = RoundedCornerShape(24.dp),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+        Text("Your page", style = MaterialTheme.typography.displaySmall.copy(fontFamily = FontFamily.Serif))
+        OutlinedTextField(
+            state.draft, edit,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 330.dp),
+            enabled = !state.saving,
+            placeholder = { Text("Start anywhere...", style = MaterialTheme.typography.bodyLarge) },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 21.sp, lineHeight = 33.sp, fontFamily = FontFamily.Serif),
+            visualTransformation = highlighter,
+            shape = RoundedCornerShape(22.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = palette.surfaceContainerLow,
+                unfocusedContainerColor = palette.surfaceContainerLow,
+                focusedBorderColor = palette.primary,
+                unfocusedBorderColor = palette.outlineVariant,
+            ),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            if (state.draft.isNotBlank() && !state.preview) Text(if (state.draftStored) "Draft saved on device" else "Saving draft…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.draft.isNotBlank() && !state.preview) Text(if (state.draftStored) "Draft saved on device" else "Saving draft…", style = MaterialTheme.typography.labelSmall, color = palette.onSurfaceVariant)
         }
-        val saveInteraction = remember { MutableInteractionSource() }
-        Button(onClick = save, enabled = state.draft.isNotBlank() && !state.saving, interactionSource = saveInteraction,
-            modifier = Modifier.fillMaxWidth().height(56.dp).pressScale(saveInteraction), shape = RoundedCornerShape(16.dp)) {
-            if (state.saving) { CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp); Spacer(Modifier.width(12.dp)) }
+        Button(
+            onClick = save,
+            enabled = state.draft.isNotBlank() && !state.saving,
+            modifier = Modifier.fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            if (state.saving) { CircularProgressIndicator(Modifier.size(20.dp), color = palette.onPrimary, strokeWidth = 2.dp); Spacer(Modifier.width(12.dp)) }
             Text(if (state.saving) "Saving your moment…" else "Save moment")
         }
-
     }
 }
 
@@ -224,9 +291,12 @@ private fun InsightCard(insight: Insight, entries: List<Moment>, selected: (Mome
 @Composable
 private fun SourceMoments(ids: List<String>, entries: List<Moment>, selected: (Moment) -> Unit) {
     ids.mapNotNull { id -> entries.find { it.id == id } }.forEach { moment ->
-        val interaction = remember { MutableInteractionSource() }
-        OutlinedCard(onClick = { selected(moment) }, interactionSource = interaction,
-            modifier = Modifier.fillMaxWidth().pressScale(interaction, targetScale = 0.98f)) {
+        OutlinedCard(
+            onClick = { selected(moment) },
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Open source moment", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 Text(moment.memory?.title?.ifBlank { null } ?: moment.content.take(100), style = MaterialTheme.typography.bodyMedium)
@@ -236,12 +306,24 @@ private fun SourceMoments(ids: List<String>, entries: List<Moment>, selected: (M
 }
 
 @Composable
-fun SettingsScreen(state: JournalUiState, appearance: (String) -> Unit, signOut: () -> Unit, checkServices: () -> Unit) {
+fun SettingsScreen(
+    state: JournalUiState,
+    appearance: (String) -> Unit,
+    signOut: () -> Unit,
+    checkServices: () -> Unit,
+    sync: () -> Unit = {},
+) {
     var confirmSignOut by remember { mutableStateOf(false) }
+    val server = state.device.connection?.server.orEmpty()
+    val syncing = state.loadingMoments || state.loadingTasks
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         if (BuildConfig.DEBUG && !state.preview) AppUpdateCard()
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-            Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
                 Text(if (state.preview) "Exploring August" else state.device.session?.user?.email.orEmpty(), style = MaterialTheme.typography.titleMedium)
                 Text(if (state.preview) "You're viewing a sample journal. Connect your August server to start your own." else "Your saved moments follow this account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -254,12 +336,31 @@ fun SettingsScreen(state: JournalUiState, appearance: (String) -> Unit, signOut:
             }
         }
         HorizontalDivider()
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Connected journal", style = MaterialTheme.typography.titleMedium)
-            Text(if (state.preview) "Sample data · no server requests" else state.device.connection?.server.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (state.preview) "Sample data · no server requests" else server, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!state.preview && server.isNotBlank() && server != PUBLIC_JOURNAL) {
+                Text(
+                    "Connected to a custom server instead of $PUBLIC_JOURNAL. Sign in to the same server on desktop to sync.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!state.preview) {
+                OutlinedButton(onClick = sync, enabled = !syncing, shape = RoundedCornerShape(14.dp)) {
+                    Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (syncing) "Syncing…" else "Sync now")
+                }
+            }
         }
         if (!state.preview) {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Server status", style = MaterialTheme.typography.titleLarge)
                     Text("Check the services behind your journal, reviews, and connections.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -274,9 +375,7 @@ fun SettingsScreen(state: JournalUiState, appearance: (String) -> Unit, signOut:
                         }
                     }
                     state.servicesError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    val checkInteraction = remember { MutableInteractionSource() }
-                    OutlinedButton(onClick = checkServices, enabled = !state.loadingServices,
-                        interactionSource = checkInteraction, modifier = Modifier.pressScale(checkInteraction)) { Text("Check services") }
+                    OutlinedButton(onClick = checkServices, enabled = !state.loadingServices, shape = RoundedCornerShape(14.dp)) { Text("Check services") }
                 }
             }
         }
@@ -284,10 +383,11 @@ fun SettingsScreen(state: JournalUiState, appearance: (String) -> Unit, signOut:
             Text("Your writing & privacy", style = MaterialTheme.typography.titleMedium)
             Text("Drafts, sessions, and cached moments are encrypted on this device. Saved writing is processed by your August server and its AI provider.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val signOutInteraction = remember { MutableInteractionSource() }
-        OutlinedButton(onClick = { if (state.preview) signOut() else confirmSignOut = true },
-            interactionSource = signOutInteraction,
-            modifier = Modifier.fillMaxWidth().height(52.dp).pressScale(signOutInteraction)) {
+        OutlinedButton(
+            onClick = { if (state.preview) signOut() else confirmSignOut = true },
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) {
             Icon(Icons.AutoMirrored.Filled.ExitToApp, null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp)); Text(if (state.preview) "Connect my journal" else "Sign out")
         }
         Text("August for Android · ${BuildConfig.VERSION_NAME}\nBuilt with Kotlin & Jetpack Compose", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

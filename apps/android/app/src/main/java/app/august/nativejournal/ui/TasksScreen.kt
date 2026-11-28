@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -41,7 +43,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -97,77 +98,83 @@ fun TasksScreen(
             matchesStatus && matchesDay
         }.sortedWith(compareBy({ it.completed }, { it.dueAt ?: "9999" }, { it.createdAt }))
     }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(if (layout == "grid") 2 else 1), modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(13.dp),
+    PullToRefreshBox(
+        isRefreshing = state.loadingTasks && state.tasks.isNotEmpty() && !state.preview,
+        onRefresh = { if (!state.preview) refresh() },
+        modifier = Modifier.fillMaxSize(),
     ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Your plans", style = plannerTitle())
-                    Text("${state.tasks.size - finished} open · $finished done",
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                FilledIconButton(onClick = add, modifier = Modifier.size(49.dp).semantics { contentDescription = "Add task" }) {
-                    Icon(Icons.Default.Add, null)
-                }
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            PlannerWeek(today, dayFilter) { dayFilter = if (dayFilter == it) null else it }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(4.dp)))
-                TextButton(onClick = { dayFilter = null }, enabled = dayFilter != null) {
-                    Text(if (dayFilter == null) "All dates" else "Clear date")
-                }
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(listOf("open" to "To do", "reminders" to "Reminders", "completed" to "Done", "all" to "All")) { (value, label) ->
-                    FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(label) })
-                }
-            }
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (filter == "completed") "Completed" else "Up next", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = { layout = if (layout == "grid") "list" else "grid" }) {
-                    if (layout == "grid") Icon(Icons.AutoMirrored.Filled.List, "Switch to list view")
-                    else Box(Modifier.semantics { contentDescription = "Switch to grid view" }) { GridIcon() }
-                }
-                FilledTonalIconButton(onClick = { layout = if (layout == "focus") "grid" else "focus" }) {
-                    Icon(Icons.Default.PlayArrow, if (layout == "focus") "Exit focus view" else "Focus view")
-                }
-                IconButton(onClick = refresh, enabled = !state.loadingTasks && !state.preview) {
-                    Icon(Icons.Default.Refresh, "Refresh tasks")
-                }
-            }
-        }
-        if (state.loadingTasks) item(span = { GridItemSpan(maxLineSpan) }) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        state.tasksError?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { RequestError("Couldn't sync tasks", message, refresh) } }
-        if (visible.isEmpty() && !state.loadingTasks && state.tasksError == null) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(if (layout == "grid") 2 else 1), modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 22.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(13.dp),
+        ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyState(
-                    if (dayFilter != null) "Nothing due that day" else if (filter == "completed") "No completed tasks yet" else "Nothing on this list",
-                    if (state.tasks.isEmpty()) "Write naturally in your journal. August picks up tasks and reminders when you save."
-                    else "Try another filter to see your other tasks.",
-                    if (state.tasks.isEmpty()) "Write in journal" else null, write,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Your plans", style = plannerTitle())
+                        Text("${state.tasks.size - finished} open · $finished done",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledIconButton(onClick = add, modifier = Modifier.size(49.dp).semantics { contentDescription = "Add task" }) {
+                        Icon(Icons.Default.Add, null)
+                    }
+                }
             }
-        } else if (layout == "focus" && visible.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                TaskDeck(visible, state.updatingTasks, now, complete) { editing = it }
+                PlannerWeek(today, dayFilter) { dayFilter = if (dayFilter == it) null else it }
             }
-        } else {
-            items(visible, key = { it.id }) { task ->
-                PlannerCard(task, task.id in state.updatingTasks, now, false, Modifier.animateItem(), complete) { editing = task }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(4.dp)))
+                    TextButton(onClick = { dayFilter = null }, enabled = dayFilter != null) {
+                        Text(if (dayFilter == null) "All dates" else "Clear date")
+                    }
+                }
             }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(listOf("open" to "To do", "reminders" to "Reminders", "completed" to "Done", "all" to "All")) { (value, label) ->
+                        FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(label) })
+                    }
+                }
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (filter == "completed") "Completed" else "Up next", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                    IconButton(onClick = { layout = if (layout == "grid") "list" else "grid" }) {
+                        if (layout == "grid") Icon(Icons.AutoMirrored.Filled.List, "Switch to list view")
+                        else Box(Modifier.semantics { contentDescription = "Switch to grid view" }) { GridIcon() }
+                    }
+                    FilledTonalIconButton(onClick = { layout = if (layout == "focus") "grid" else "focus" }) {
+                        Icon(Icons.Default.PlayArrow, if (layout == "focus") "Exit focus view" else "Focus view")
+                    }
+                    IconButton(onClick = refresh, enabled = !state.loadingTasks && !state.preview) {
+                        Icon(Icons.Default.Refresh, "Refresh tasks")
+                    }
+                }
+            }
+            if (state.loadingTasks && state.tasks.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            state.tasksError?.let { message -> item(span = { GridItemSpan(maxLineSpan) }) { RequestError("Couldn't sync tasks", message, refresh) } }
+            if (visible.isEmpty() && !state.loadingTasks && state.tasksError == null) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    EmptyState(
+                        if (dayFilter != null) "Nothing due that day" else if (filter == "completed") "No completed tasks yet" else "Nothing on this list",
+                        if (state.tasks.isEmpty()) "Write naturally in your journal. August picks up tasks and reminders when you save."
+                        else "Try another filter to see your other tasks.",
+                        if (state.tasks.isEmpty()) "Write in journal" else null, write,
+                    )
+                }
+            } else if (layout == "focus" && visible.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    TaskDeck(visible, state.updatingTasks, now, complete) { editing = it }
+                }
+            } else {
+                items(visible, key = { it.id }) { task ->
+                    PlannerCard(task, task.id in state.updatingTasks, now, false, Modifier.animateItem(), complete) { editing = task }
+                }
+            }
+            if (!state.preview) item(span = { GridItemSpan(maxLineSpan) }) { TaskTools(state, reminders) }
         }
-        if (!state.preview) item(span = { GridItemSpan(maxLineSpan) }) { TaskTools(state, reminders) }
     }
     editing?.let { task ->
         TaskEditor(task, close = { editing = null }, save = { title, due, _ ->
@@ -254,17 +261,15 @@ private fun PlannerCard(
         overdue -> palette.errorContainer
         reminder -> palette.tertiaryContainer
         task.dueAt != null -> palette.secondaryContainer
-        else -> palette.primaryContainer
+        else -> palette.surfaceContainerLow
     }
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-        .background(Brush.linearGradient(listOf(palette.surfaceContainerLow, tint)))) {
-        Canvas(Modifier.matchParentSize()) {
-            val center = Offset(size.width, size.height * .87f)
-            repeat(4) { index ->
-                drawCircle(palette.primary.copy(alpha = .10f), size.width * (.13f + .12f * index), center, style = Stroke(1.dp.toPx()))
-            }
-        }
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = tint,
+        border = androidx.compose.foundation.BorderStroke(1.dp, palette.outlineVariant),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(if (reminder) "Reminder" else "Task", style = MaterialTheme.typography.labelLarge, color = palette.onSurfaceVariant)
             Text(task.title, style = if (focused) plannerTitle() else MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Serif),
                 fontWeight = FontWeight.SemiBold, textDecoration = if (task.completed) TextDecoration.LineThrough else TextDecoration.None)

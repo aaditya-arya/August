@@ -21,19 +21,34 @@ export default function JournalPage() {
   const [today] = useState(() => new Date());
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/items?days=${period}`, { signal: controller.signal, cache: "no-store" })
-      .then(async response => {
-        if (!response.ok) throw new Error("Journal request failed");
-        const data = await response.json();
-        if (!controller.signal.aborted) {
-          setItems(data.items || []);
-          setError(false);
-        }
-      })
-      .catch(() => { if (!controller.signal.aborted) setError(true); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    let controller: AbortController | null = null;
+    const loadItems = (silent: boolean) => {
+      controller?.abort();
+      const next = new AbortController();
+      controller = next;
+      fetch(`/api/items?days=${period}`, { signal: next.signal, cache: "no-store" })
+        .then(async response => {
+          if (!response.ok) throw new Error("Journal request failed");
+          const data = await response.json();
+          if (!next.signal.aborted) {
+            setItems(data.items || []);
+            setError(false);
+          }
+        })
+        .catch(() => { if (!next.signal.aborted && !silent) setError(true); })
+        .finally(() => { if (!next.signal.aborted) setLoading(false); });
+    };
+    loadItems(false);
+    const refresh = () => { if (document.visibilityState === "visible") loadItems(true); };
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller?.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [period, revision]);
 
   useEffect(() => {

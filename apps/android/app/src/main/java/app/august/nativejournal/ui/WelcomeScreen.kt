@@ -1,8 +1,9 @@
 package app.august.nativejournal.ui
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -13,7 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.august.nativejournal.JournalUiState
@@ -36,17 +37,28 @@ fun WelcomeScreen(
         Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Text("August", style = MaterialTheme.typography.titleLarge)
-        Column(
-            Modifier.fillMaxWidth().background(
-                Brush.linearGradient(listOf(palette.primaryContainer, palette.tertiaryContainer)),
-                RoundedCornerShape(36.dp),
-            ).padding(28.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+        Text("August", style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Serif))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = palette.surfaceContainerLow,
+            border = BorderStroke(1.dp, palette.outlineVariant),
         ) {
-            Icon(Icons.Default.Edit, null, Modifier.size(34.dp), tint = palette.onPrimaryContainer)
-            Text("Make time\nfor yourself.", style = MaterialTheme.typography.displayMedium, color = palette.onPrimaryContainer)
-            Text("A journal for what’s on your mind.", style = MaterialTheme.typography.bodyLarge, color = palette.onPrimaryContainer)
+            Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Surface(shape = CircleShape, color = palette.primaryContainer) {
+                    Icon(Icons.Default.Edit, null, Modifier.padding(12.dp).size(24.dp), tint = palette.primary)
+                }
+                Text(
+                    "Make time\nfor yourself.",
+                    style = MaterialTheme.typography.displayMedium.copy(fontFamily = FontFamily.Serif),
+                    color = palette.onSurface,
+                )
+                Text(
+                    "A journal for what’s on your mind.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = palette.onSurfaceVariant,
+                )
+            }
         }
         if (custom) {
             OutlinedTextField(
@@ -62,7 +74,8 @@ fun WelcomeScreen(
         Button(
             onClick = { signIn(if (custom) address else PUBLIC_JOURNAL) },
             enabled = !blocked && (!custom || address.isNotBlank()),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp),
         ) {
             if (state.busy) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = palette.onPrimary, strokeWidth = 2.dp)

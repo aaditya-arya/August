@@ -14,21 +14,35 @@ export function flyPassage(
   text: string,
   color: string,
   delay = 0,
-  options?: { glow?: string; kind?: string },
+  options?: { glow?: string; kind?: string; fallbackSelector?: string },
 ) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches || !Element.prototype.animate) return;
   try { if (JSON.parse(localStorage.getItem("august-editor-preferences") || "{}").still) return; } catch {}
-  const targetEl = [...document.querySelectorAll<HTMLElement>(selector)].find(
-    el => el.getClientRects().length && getComputedStyle(el).visibility === "visible",
-  );
+  const findTarget = (query?: string) => {
+    if (!query) return undefined;
+    const visible = [...document.querySelectorAll<HTMLElement>(query)].filter(
+      el => el.getClientRects().length && getComputedStyle(el).visibility === "visible",
+    );
+    return visible.find(el => {
+      const r = el.getBoundingClientRect();
+      return r.bottom >= 0 && r.top <= innerHeight;
+    }) ?? visible[0];
+  };
+  const targetEl = findTarget(selector) ?? findTarget(options?.fallbackSelector);
   const bounds = targetEl?.getBoundingClientRect();
-  if (!targetEl || !bounds || from.bottom < 0 || from.top > innerHeight || bounds.bottom < 0 || bounds.top > innerHeight) return;
+  if (!targetEl || !bounds || !bounds.width) return;
 
   const glow = options?.glow ?? "rgba(136, 146, 210, 0.45)";
-  const p0: Point = { x: from.left, y: from.top };
-  const p3: Point = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
-  const p1: Point = { x: p0.x + (p3.x - p0.x) * 0.28, y: p0.y - 78 };
-  const p2: Point = { x: p0.x + (p3.x - p0.x) * 0.72, y: p3.y - 46 };
+  const p0: Point = {
+    x: Math.max(16, Math.min(innerWidth - 160, from.left)),
+    y: Math.max(28, Math.min(innerHeight - 36, from.top)),
+  };
+  const p3: Point = {
+    x: Math.max(16, Math.min(innerWidth - 16, bounds.left + bounds.width / 2)),
+    y: Math.max(24, Math.min(innerHeight - 24, bounds.top + bounds.height / 2)),
+  };
+  const p1: Point = { x: p0.x + (p3.x - p0.x) * 0.24, y: Math.max(24, p0.y - 96) };
+  const p2: Point = { x: p0.x + (p3.x - p0.x) * 0.72, y: Math.max(24, p3.y - 52) };
   const duration = 1480;
 
   const nodes: HTMLElement[] = [];
@@ -57,7 +71,7 @@ export function flyPassage(
     const dx = pt.x - p0.x;
     const dy = pt.y - p0.y;
     const sway = Math.sin(t * Math.PI * 1.4) * -5;
-    const scale = t < 0.14 ? 0.92 + (t / 0.14) * 0.12 : 1.04 - Math.pow((t - 0.14) / 0.86, 1.5) * 0.9;
+    const scale = t < 0.16 ? 0.9 + (t / 0.16) * 0.18 : 1.08 - Math.pow((t - 0.16) / 0.84, 1.45) * 0.92;
     const opacity = t < 0.12 ? t / 0.12 : t > 0.78 ? 1 - (t - 0.78) / 0.22 : 1;
     const blur = t > 0.78 ? `blur(${((t - 0.78) / 0.22 * 5).toFixed(1)}px)` : "blur(0px)";
     keyframes.push({

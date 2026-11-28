@@ -75,6 +75,8 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private var connectionJob: Job? = null
     private var tasksRequested = false
     private var taskRead = 0
+    private var lastMomentSyncMs = 0L
+    private var lastTaskSyncMs = 0L
 
     init {
         viewModelScope.launch {
@@ -88,6 +90,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     if (changed) {
                         momentJob?.cancel(); reviewJob?.cancel(); graphJob?.cancel(); servicesJob?.cancel(); tasksJob?.cancel()
                         reviewRequest++; graphRequest++
+                        lastMomentSyncMs = 0L; lastTaskSyncMs = 0L
                     }
                     if (tasksChanged) { reviewJob?.cancel(); reviewRequest++ }
                     mutable.update { current ->
@@ -104,7 +107,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                             loadingReview = if (tasksChanged) false else current.loadingReview,
                             loadingReflection = if (tasksChanged) false else current.loadingReflection)
                     }
-                    if (changed && device.session != null) { refreshMoments(); refreshTasks() }
+                    if (changed && device.session != null) { refreshMoments(force = true); refreshTasks() }
                     if (device.session != null) tasksRequested = false
                     if (tasksChanged && state.value.destination == Destination.Review && !state.value.preview) loadReview()
                 }
@@ -118,10 +121,18 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
 
     fun navigate(destination: Destination) {
         mutable.update { it.copy(destination = destination) }
+        if (destination == Destination.Moments && !state.value.preview) refreshMoments(force = false)
         if (destination == Destination.Review && state.value.review == null && !state.value.preview && !state.value.loadingReview) loadReview()
         if (destination == Destination.Graph && state.value.graph == null && !state.value.preview && !state.value.loadingGraph) loadGraph()
         if (destination == Destination.Settings && state.value.serverStatus == null && !state.value.preview && !state.value.loadingServices) checkServices()
         if (destination == Destination.Tasks && !state.value.preview) refreshTasks()
+    }
+
+    fun syncFromCloud(force: Boolean = false) {
+        if (state.value.preview || state.value.device.session == null) return
+        refreshMoments(force = force)
+        val taskStale = System.currentTimeMillis() - lastTaskSyncMs >= 10_000L || state.value.tasks.isEmpty()
+        if (force || taskStale) refreshTasks(restart = force)
     }
 
     fun openTasks() {
@@ -258,20 +269,36 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                     loadingReview = false, loadingReflection = false, loadingGraph = false, loadingMoments = false,
                     reviewError = null, reflectionError = null, graphError = null,
                     destination = Destination.Moments, savedNote = saved) }
-                refreshMoments()
+                refreshMoments(force = true)
                 refreshTasks(restart = true)
             } catch (error: Exception) { report(error) }
             finally { mutable.update { it.copy(saving = false) } }
         }
     }
 
-    fun refreshMoments() {
+    fun refreshMoments(force: Boolean = false) {
         if (state.value.loadingMoments || state.value.preview) return
+        if (!force && state.value.moments.isNotEmpty() && System.currentTimeMillis() - lastMomentSyncMs < 10_000L) return
         val key = state.value.device.accountKey() ?: return
         mutable.update { it.copy(loadingMoments = true, momentsError = null) }
         momentJob = viewModelScope.launch {
-            try { val moments = repository.moments(); if (key == repository.state.value.accountKey()) mutable.update { it.copy(moments = moments) } }
-            catch (error: Exception) {
+            try {
+                val previousIds = state.value.moments.map { it.id }
+                val moments = repository.moments()
+                if (key == repository.state.value.accountKey()) {
+                    lastMomentSyncMs = System.currentTimeMillis()
+                    val momentsChanged = previousIds != moments.map { it.id }
+                    mutable.update { current ->
+                        current.copy(
+                            moments = moments,
+                            review = if (momentsChanged && current.destination != Destination.Review) null else current.review,
+                            graph = if (momentsChanged && current.destination != Destination.Graph) null else current.graph,
+                        )
+                    }
+                    if (momentsChanged && state.value.destination == Destination.Review && !state.value.preview) loadReview()
+                    if (momentsChanged && state.value.destination == Destination.Graph && !state.value.preview) loadGraph()
+                }
+            } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 if (key == repository.state.value.accountKey()) mutable.update { it.copy(momentsError = requestMessage(error)) }
             }
@@ -356,7 +383,12 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         val read = ++taskRead
         mutable.update { it.copy(loadingTasks = true, tasksError = null) }
         tasksJob = viewModelScope.launch {
-            try { repository.tasks() }
+            try {
+                repository.tasks()
+                if (read == taskRead && key == repository.state.value.accountKey()) {
+                    lastTaskSyncMs = System.currentTimeMillis()
+                }
+            }
             catch (error: Exception) {
                 if (error is CancellationException) throw error
                 if (read == taskRead && key == repository.state.value.accountKey()) mutable.update { it.copy(tasksError = requestMessage(error)) }

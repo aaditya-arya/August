@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (model.state.value.device.session != null) {
-            model.refreshTasks()
+            model.syncFromCloud(force = false)
             app.august.nativejournal.tasks.TaskRuntime.update(this, model.state.value.device)
         }
     }
