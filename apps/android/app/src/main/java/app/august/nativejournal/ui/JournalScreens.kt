@@ -11,11 +11,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,7 +27,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -40,45 +39,42 @@ import app.august.nativejournal.JournalUiState
 import app.august.nativejournal.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 @Composable
-fun MomentsScreen(state: JournalUiState, selected: (Moment) -> Unit, write: () -> Unit, retry: () -> Unit) {
+fun MomentsScreen(
+    state: JournalUiState, selected: (Moment) -> Unit, write: () -> Unit, retry: () -> Unit,
+    dismissReceipt: () -> Unit, openTasks: () -> Unit,
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
     val categories = remember(state.moments) { state.moments.map { it.category }.distinct().sorted() }
     val filtered = remember(state.moments, query, category) {
         state.moments.filter { moment -> (category == null || category == moment.category) &&
             (query.isBlank() || listOf(moment.content, moment.memory?.title.orEmpty(), categoryLabel(moment.category), moment.tags.joinToString(" ")).any { it.contains(query.trim(), ignoreCase = true) }) }
     }
-    LazyColumn(contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val list = rememberLazyListState()
+    LaunchedEffect(state.savedNote?.noteId) {
+        if (state.savedNote != null) list.scrollToItem(1)
+    }
+    LazyColumn(state = list, contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { JournalDashboard(state, write, openTasks) }
+        state.savedNote?.let { receipt -> item(key = "receipt:${receipt.noteId}") { NoteReceipt(receipt, state, dismissReceipt, openTasks) } }
         item {
-            val palette = MaterialTheme.colorScheme
-            Column(
-                Modifier.fillMaxWidth().background(
-                    Brush.linearGradient(listOf(palette.primaryContainer, palette.tertiaryContainer)), RoundedCornerShape(32.dp),
-                ).padding(26.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                Text(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d")),
-                    style = MaterialTheme.typography.titleMedium, color = palette.onPrimaryContainer)
-                Text(if (state.draft.isBlank()) "What's on your mind?" else "Your draft is waiting",
-                    style = MaterialTheme.typography.displayMedium, color = palette.onPrimaryContainer)
-                Button(onClick = write, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
-                    Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (state.draft.isBlank()) "Start writing" else "Continue draft")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Recent moments", Modifier.weight(1f), style = plannerTitle())
+                IconButton(onClick = { searching = !searching; if (!searching) { query = ""; category = null } }) {
+                    Icon(if (searching) Icons.Default.Close else Icons.Default.Search, if (searching) "Hide search" else "Search moments")
                 }
             }
         }
-        item { Text("Recent moments", style = MaterialTheme.typography.headlineMedium) }
-        item {
+        if (searching) item {
             OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Find a moment, person, or idea") },
                 leadingIcon = { Icon(Icons.Default.Search, null) }, trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") } },
                 singleLine = true, shape = RoundedCornerShape(28.dp))
         }
-        if (categories.isNotEmpty()) item {
+        if (searching && categories.isNotEmpty()) item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FilterChip(selected = category == null, onClick = { category = null }, label = { Text("All moments") }) }
                 items(categories) { value -> FilterChip(selected = category == value, onClick = { category = if (category == value) null else value }, label = { Text(categoryLabel(value)) }) }
@@ -117,6 +113,10 @@ fun WriteScreen(state: JournalUiState, edit: (String) -> Unit, save: () -> Unit)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Start anywhere.", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
             FilterChip(selected = prompts, onClick = { prompts = !prompts }, label = { Text("Prompts") })
+        }
+        if (!state.preview && state.draft.isBlank()) {
+            Text("Write a thought or a plan. August picks up tasks, reminders, and events when you save.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(
             visible = prompts,

@@ -1,7 +1,7 @@
 <resources>
-    <color name="task_widget_surface">#1B1921</color>
-    <color name="task_widget_text">#E9E5EF</color>
-    <color name="task_widget_secondary">#C7C1D0</color>
-    <color name="task_widget_accent">#C5C0FF</color>
-    <color name="task_widget_outline">#48434F</color>
+    <color name="task_widget_surface">#18211D</color>
+    <color name="task_widget_text">#EAF2EC</color>
+    <color name="task_widget_secondary">#BCCBC3</color>
+    <color name="task_widget_accent">#9FD5C5</color>
+    <color name="task_widget_outline">#3F5349</color>
 </resources>

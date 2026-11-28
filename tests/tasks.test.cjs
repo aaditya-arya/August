@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { taskList, toTask, taskUpdate } = require('../.test-build/tasks.js');
+const { taskList, toTask, taskUpdate, detectedEvents } = require('../.test-build/tasks.js');
 const { parseExtraction, normalizeStoredItem } = require('../.test-build/ledger.js');
 const { zonedDateTimeToUtc } = require('../.test-build/time.js');
 const { directIntentions } = require('../.test-build/review.js');
@@ -71,4 +71,24 @@ test('new extraction stores work intent without inventing a Calendar event or de
   assert.deepEqual(parsed.calendar_action.task, metadata());
   assert.equal(toTask({ ...parsed, id: 'new', created_at: now }).due_at, null);
   assert.throws(() => parseExtraction({ items: [entry({ task_action: { is_task: true, title: 'Build site', due_at: 'Friday' } })] }, now), /deadline/);
+});
+
+test('a reminder keeps its kind after edits, and an appointment appears only as an event', () => {
+  const date = '2026-11-27T03:30:00Z';
+  const reminder = entry({ id: 'call', category: 'Reminder', content: 'Remind me to call the bank tomorrow at 9am.',
+    task_action: { is_task: true, kind: 'reminder', title: 'Call the bank', due_at: date },
+    calendar_action: { is_actionable: true, kind: 'reminder', start_time: date } });
+  const event = entry({ id: 'appointment', category: 'Event', content: 'My dentist appointment is Friday at 9am.',
+    task_action: { is_task: true, kind: 'task', title: 'Dentist appointment', due_at: date },
+    calendar_action: { is_actionable: true, kind: 'event', start_time: date } });
+  const [savedReminder, savedEvent] = parseExtraction({ items: [reminder, event] }, now)
+    .map((item, index) => ({ ...item, id: index === 0 ? 'call' : 'appointment', created_at: now }));
+  assert.equal(taskList([savedReminder, savedEvent]).length, 1);
+  assert.equal(toTask(savedReminder).kind, 'reminder');
+  assert.equal(taskUpdate(savedReminder, { due_at: null }, 'UTC').task.kind, 'reminder');
+  assert.equal(savedEvent.calendar_action.task, undefined);
+  const events = detectedEvents([savedReminder, savedEvent, { ...savedEvent, category: 'Wishlist' }]);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].calendar_synced, false);
+  assert.equal(detectedEvents([{ ...savedEvent, calendar_status: 'synced' }])[0].calendar_synced, true);
 });

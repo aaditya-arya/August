@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import android.os.Bundle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.work.ListenableWorker
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.workDataOf
@@ -84,6 +86,26 @@ class TasksIntegrationTest {
                         }
                         AugustJson.encodeToString(TaskMutation(task))
                     } else AugustJson.encodeToString(TasksResponse(saved.values.sortedBy { it.id }))
+                    "/api/notes" -> {
+                        val draft = JSONObject(request.body.readUtf8()).getString("content")
+                        if (!draft.contains("call the bank")) {
+                            return MockResponse().setResponseCode(400).setBody("""{"error":"Expected the synthetic journal note"}""")
+                        }
+                        val created = Instant.now()
+                        val reminder = JournalTask(
+                            "auto-reminder", "Call the bank", "Remind me to call the bank tomorrow at 9.",
+                            dueAt = created.plusSeconds(86400).toString(), updatedAt = created.toString(),
+                            createdAt = created.toString(), kind = "reminder",
+                        )
+                        val task = reminder.copy(id = "auto-task", title = "Build a portfolio", content = "I'm building a portfolio.",
+                            dueAt = null, kind = "task")
+                        saved[reminder.id] = reminder
+                        saved[task.id] = task
+                        AugustJson.encodeToString(SaveResponse(
+                            true, "synthetic-journal-note", 3, listOf(task, reminder),
+                            listOf(DetectedEvent("auto-event", "Dentist appointment", created.plusSeconds(172800).toString())),
+                        ))
+                    }
                     "/api/items" -> """{"items":[]}"""
                     "/api/digest/synthesis" -> {
                         if (request.requestUrl?.queryParameter("summary") != "1") {
@@ -117,8 +139,9 @@ class TasksIntegrationTest {
     @Test fun signedInTaskGridCompletesAndUndoesWithoutLosingTheUndatedTask() {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Tasks", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Tasks", useUnmergedTree = true).performClick()
-        compose.onNodeWithContentDescription("Complete Build the test website").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Your plans").assertIsDisplayed()
         screenshot("tasks-grid.png")
+        compose.onNodeWithContentDescription("Complete Build the test website").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Complete Build the test website").performClick()
         compose.waitUntil(10_000) { repository.state.value.cachedTasks.values.flatten().any { it.id == id && it.completed } }
         compose.onNodeWithText("One more thing, done.").assertIsDisplayed()
@@ -168,6 +191,25 @@ class TasksIntegrationTest {
         compose.onNodeWithText("The first prototype").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun journalSaveShowsTheAutomaticActionsAndUpdatesTheTaskBoard() {
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Write a moment").fetchSemanticsNodes().isNotEmpty() }
+        screenshot("journal-dashboard.png")
+        compose.onNodeWithContentDescription("Write a moment").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("I'm building a portfolio. Remind me to call the bank tomorrow at 9. Dentist appointment on Friday.")
+        compose.onNodeWithText("Save moment").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Saved from your note").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Call the bank").assertIsDisplayed()
+        compose.onNodeWithText("Dentist appointment").assertIsDisplayed()
+        screenshot("journal-receipt.png")
+        assertTrue(repository.state.value.cachedTasks.values.flatten().any { it.kind == "reminder" && it.id == "auto-reminder" })
+        compose.onNodeWithText("View tasks").performScrollTo().performClick()
+        compose.onNodeWithText("Reminders").performClick()
+        compose.onNodeWithText("Call the bank").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Focus view").performScrollTo().performClick()
+        compose.onNodeWithText("Call the bank").assertIsDisplayed()
+        screenshot("tasks-focus.png")
+    }
+
     @Test fun widgetDisplaysCachedTasksAndItsCheckButtonSavesCompletion() = withWidget { widget, manager, widgetId ->
         screenshot("tasks-widget.png")
         manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180); putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 180) })
@@ -189,7 +231,7 @@ class TasksIntegrationTest {
         manager.updateAppWidgetOptions(widgetId, Bundle().apply { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 180) })
         compose.runOnIdle { assertTrue(widget.findViewById<TextView>(R.id.widget_add).hasOnClickListeners()) }
         compose.onNodeWithText("Tasks", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("Add task").performClick()
+        compose.onNodeWithContentDescription("Add task").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("New task").fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasSetTextAction() and hasText("Task title")).performTextInput("Send the design")
         screenshot("tasks-quick-add.png")
@@ -205,6 +247,26 @@ class TasksIntegrationTest {
             shown
         }
         assertTrue(saved.values.single { it.title == "Send the design" }.dueAt == null)
+    }
+
+    @Test fun widgetQuickAddSavesWithoutNavigatingToTheTaskBoard() = withWidget(showApp = true) { widget, _, _ ->
+        compose.onNodeWithContentDescription("Write a moment").assertIsDisplayed()
+        compose.runOnIdle { widget.findViewById<TextView>(R.id.widget_add).performClick() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("New task").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasSetTextAction() and hasText("Task title")).performTextInput("Pick up the prints")
+        screenshot("widget-quick-add.png")
+        compose.onNodeWithText("Add task").performClick()
+        compose.waitUntil(10_000) { saved.values.any { it.title == "Pick up the prints" } }
+        compose.waitUntil(20_000) {
+            var journalResumed = false
+            compose.runOnUiThread {
+                val resumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                journalResumed = resumed.any { it is MainActivity } && resumed.none { it is QuickTaskActivity }
+            }
+            journalResumed
+        }
+        compose.onNodeWithContentDescription("Write a moment").assertIsDisplayed()
+        assertTrue(repository.state.value.cachedTasks.values.flatten().any { it.title == "Pick up the prints" })
     }
 
     private fun withWidget(showApp: Boolean = false, run: (AppWidgetHostView, AppWidgetManager, Int) -> Unit) {
@@ -241,6 +303,6 @@ class TasksIntegrationTest {
 
     private fun screenshot(name: String) {
         val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: compose.onRoot().captureToImage().asAndroidBitmap()
-        File(context.getExternalFilesDir(null), name).outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(context.cacheDir, name).outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

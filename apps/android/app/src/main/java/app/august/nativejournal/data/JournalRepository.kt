@@ -167,7 +167,16 @@ class JournalRepository(private val storage: DeviceStorage, private val http: Au
         val saved = ServerJson.decodeFromString<SaveResponse>(authorized("/api/notes", method = "POST", body = body, retryKey = submission.key, timeoutSeconds = 300))
         check(saved.success) { "The moment was not saved. Your draft is still here." }
         checkAccount(key, expectedGeneration)
-        change { it.copy(drafts = it.drafts + (key to (it.drafts[key] ?: Draft()).afterSave(submission))) }
+        if (saved.tasks.isNotEmpty()) taskRevision.incrementAndGet()
+        change { current ->
+            check(current.accountKey() == key && generation == expectedGeneration) { "The active account changed. Please try again." }
+            val existing = current.cachedTasks[key].orEmpty()
+            val merged = (existing + saved.tasks).distinctBy { it.id }.sortedBy { it.id }
+            current.copy(
+                drafts = current.drafts + (key to (current.drafts[key] ?: Draft()).afterSave(submission)),
+                cachedTasks = if (saved.tasks.isEmpty()) current.cachedTasks else current.cachedTasks + (key to merged),
+            )
+        }
         return saved
     }
 

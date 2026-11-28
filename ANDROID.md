@@ -4,9 +4,10 @@ The Android app is a native Kotlin / Jetpack Compose application in [apps/androi
 
 ## Install on your phone
 
-1. On an Android 8.0 or newer phone, [download August Dev 0.5.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) and install it. If Android asks, allow installs from the app you used to open the APK.
+1. On an Android 8.0 or newer phone, [download August Dev 0.6.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) and install it. If Android asks, allow installs from the app you used to open the APK.
 2. Open August Dev and tap **Continue with Google**. The app uses `https://august-topaz.vercel.app` by default. A saved sign-in on an existing install can open the journal directly.
-3. Open the checkmark **Tasks** tab. Tap **Add task** to save a title with an optional deadline. Under **Reminders & widget**, allow notifications and tap **Add home-screen widget**. The widget's **+** opens quick add, and each circle marks a task complete.
+3. Save a journal note such as “I'm building my portfolio. Remind me to call the bank tomorrow at 9 a.m.” The save summary shows the task and reminder, and both appear under **Tasks**.
+4. In **Tasks → Reminders & widget**, allow notifications and tap **Add home-screen widget**. The widget's **+** opens a small form over the home screen. Save or close it to go back to where you were. Each circle marks a task complete.
 
 The deployed backend works over Wi-Fi or mobile data with your PC switched off. If a protected Vercel preview asks you to log into Vercel, change the journal address to the public production URL above.
 

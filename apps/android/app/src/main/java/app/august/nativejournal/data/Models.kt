@@ -44,7 +44,16 @@ data class Moment(
 @Serializable
 data class ItemsResponse(val items: List<Moment>)
 @Serializable
-data class SaveResponse(val success: Boolean, val noteId: String, val extractedCount: Int)
+data class SaveResponse(
+    val success: Boolean, val noteId: String, val extractedCount: Int,
+    val tasks: List<JournalTask> = emptyList(), val events: List<DetectedEvent> = emptyList(),
+)
+@Serializable
+data class DetectedEvent(
+    val id: String, val title: String,
+    @SerialName("starts_at") val startsAt: String,
+    @SerialName("calendar_synced") val calendarSynced: Boolean = false,
+)
 @Serializable
 data class Insight(
     val title: String,
@@ -100,6 +109,7 @@ data class JournalTask(
     @SerialName("updated_at") val updatedAt: String,
     @SerialName("created_at") val createdAt: String,
     val tags: List<String> = emptyList(),
+    val kind: String = "task",
 )
 @Serializable data class TasksResponse(val tasks: List<JournalTask>)
 @Serializable data class TaskMutation(val task: JournalTask)

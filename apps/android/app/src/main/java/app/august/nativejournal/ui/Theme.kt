@@ -13,31 +13,31 @@ import androidx.core.view.WindowCompat
 import android.app.Activity
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF5855D6), onPrimary = Color.White,
-    primaryContainer = Color(0xFFE6E4FF), onPrimaryContainer = Color(0xFF211B61),
-    secondary = Color(0xFF52665E), secondaryContainer = Color(0xFFD7EDE1),
-    tertiary = Color(0xFF996537), tertiaryContainer = Color(0xFFFFDDBB),
-    background = Color(0xFFFAF9FD), surface = Color(0xFFFAF9FD),
-    surfaceContainer = Color(0xFFF0EFF7), surfaceContainerLow = Color(0xFFF5F3FA),
-    surfaceContainerHigh = Color(0xFFEAE7F1), onSurface = Color(0xFF1C1B21),
-    onSurfaceVariant = Color(0xFF625F6D), outlineVariant = Color(0xFFDDD9E5),
+    primary = Color(0xFF155649), onPrimary = Color.White,
+    primaryContainer = Color(0xFFD5EEE3), onPrimaryContainer = Color(0xFF11382F),
+    secondary = Color(0xFF405A67), secondaryContainer = Color(0xFFDDEBF3),
+    tertiary = Color(0xFF754D35), tertiaryContainer = Color(0xFFF6E1CD),
+    background = Color(0xFFF3F4EF), surface = Color(0xFFF9FAF6),
+    surfaceContainer = Color(0xFFE9ECE5), surfaceContainerLow = Color(0xFFFDFEFA),
+    surfaceContainerHigh = Color(0xFFE0E6DF), onSurface = Color(0xFF151D1A),
+    onSurfaceVariant = Color(0xFF4C5C54), outlineVariant = Color(0xFFCED8CF),
 )
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFC5C0FF), onPrimary = Color(0xFF2D286E),
-    primaryContainer = Color(0xFF403C8E), onPrimaryContainer = Color(0xFFE6E4FF),
-    secondary = Color(0xFFB2CEBF), secondaryContainer = Color(0xFF354C41),
-    tertiary = Color(0xFFE8BE92), tertiaryContainer = Color(0xFF573D20),
-    background = Color(0xFF131218), surface = Color(0xFF131218),
-    surfaceContainer = Color(0xFF211F27), surfaceContainerLow = Color(0xFF1B1921),
-    surfaceContainerHigh = Color(0xFF2B2832), onSurface = Color(0xFFE9E5EF),
-    onSurfaceVariant = Color(0xFFC7C1D0), outlineVariant = Color(0xFF48434F),
+    primary = Color(0xFF9FD5C5), onPrimary = Color(0xFF11382F),
+    primaryContainer = Color(0xFF214C41), onPrimaryContainer = Color(0xFFDBF4EC),
+    secondary = Color(0xFFB5D6E6), secondaryContainer = Color(0xFF243D48),
+    tertiary = Color(0xFFF1CAA5), tertiaryContainer = Color(0xFF533A2A),
+    background = Color(0xFF121B18), surface = Color(0xFF18211D),
+    surfaceContainer = Color(0xFF222E28), surfaceContainerLow = Color(0xFF1B2721),
+    surfaceContainerHigh = Color(0xFF303F37), onSurface = Color(0xFFEAF2EC),
+    onSurfaceVariant = Color(0xFFBCCBC3), outlineVariant = Color(0xFF3F5349),
 )
 
 @Composable
-fun AugustTheme(appearance: String, content: @Composable () -> Unit) {
+fun AugustTheme(appearance: String, styleSystemBars: Boolean = true, content: @Composable () -> Unit) {
     val dark = when (appearance) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     val view = LocalView.current
-    if (!view.isInEditMode) SideEffect {
+    if (styleSystemBars && !view.isInEditMode) SideEffect {
         (view.context as? Activity)?.window?.let { window ->
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !dark
@@ -47,6 +47,7 @@ fun AugustTheme(appearance: String, content: @Composable () -> Unit) {
     }
     MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, typography = Typography(
         displayMedium = TextStyle(fontSize = 44.sp, lineHeight = 48.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1.5).sp),
+        displaySmall = TextStyle(fontSize = 34.sp, lineHeight = 39.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-.7).sp),
         headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 38.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-.6).sp),
         headlineMedium = TextStyle(fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.SemiBold),
         headlineSmall = TextStyle(fontSize = 25.sp, lineHeight = 32.sp, fontWeight = FontWeight.Medium, letterSpacing = (-.3).sp),

@@ -10,6 +10,8 @@ Scheduling intent is independent of the human category. `calendar_action.kind` i
 
 Task tracking is separate from scheduling. Gemini proposes `task_action` for work the writer intends to do or is already doing, including building a site or working on a product. The server validates the title and deadline and stores the result in `calendar_action.task`, preserving the original category and source passage. Uncommitted ideas, purchase wishes, cancellations, and work described as finished stay out of the open task board. The field is empty when no task is extracted. Relative deadlines use the source block's recorded date. Date-only deadlines use 9:00 a.m. in the writer's timezone. Undated work appears in Tasks with no scheduled reminder.
 
+Gemini also distinguishes task intent from reminder intent. “Remind me to call the bank tomorrow at 9” is a reminder with a time. A vague “remind me sometime” keeps a reminder with no alert. A booked dentist appointment is an event and does not create a second task. The Android save summary is built from persisted items, so it can show what the app actually saved and whether an event reached Google Calendar.
+
 Validation commands:
 
 - `npm test`: deterministic classification, taxonomy/reuse/novelty, catalogue persistence/cache, scheduling, ingestion, graph, OAuth and scraper regressions.

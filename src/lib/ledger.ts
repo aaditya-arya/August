@@ -219,8 +219,11 @@ export function parseExtraction(value: unknown, referenceTime: string, catalogue
     const existingTask = taskMetadata(raw.calendar_action.task);
     if (raw.task_action !== undefined && (!isRecord(raw.task_action) || typeof raw.task_action.is_task !== 'boolean')) throw new Error('Invalid task intent.');
     if (existingTask) calendar_action.task = existingTask;
-    if (isRecord(raw.task_action) && raw.task_action.is_task === true) {
-      const task = taskMetadata({ version: 1, title: raw.task_action.title, due_at: raw.task_action.due_at });
+    if (isRecord(raw.task_action) && raw.task_action.is_task === true && category !== "Event" && calendar_action.kind !== "event") {
+      const reminder = category === "Reminder" || calendar_action.kind === "reminder" || raw.task_action.kind === "reminder";
+      const kind = reminder ? "reminder" : raw.task_action.kind;
+      const due = raw.task_action.due_at ?? (reminder ? calendar_action.start_time : null) ?? null;
+      const task = taskMetadata({ version: 1, title: raw.task_action.title, due_at: due, kind });
       if (!task) throw new Error('Invalid task title or deadline.');
       calendar_action.task = task;
     }

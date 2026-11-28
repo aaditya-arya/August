@@ -25,4 +25,24 @@ const examples = [
   assert.equal(find('dentist'), null);
   assert.equal(find('landing page'), null);
   console.log(JSON.stringify({ liveTaskIntent: 'passed', undatedWork: 2, datedWork: 1, nonTasksExcluded: 4, seconds: +((Date.now() - started) / 1000).toFixed(1) }));
+
+  const note = "I’m building a portfolio website. Remind me to call the bank tomorrow at 9am. My dentist appointment is on November 28 at 3pm. Remind me sometime to return the spare keys. The yoga appointment was cancelled. I might buy a keyboard someday.";
+  const mixed = await extractItems(note, { currentTime, timezone: 'Asia/Kolkata' });
+  const rows = mixed.map((item, index) => ({ ...item, id: String(index), created_at: currentTime }));
+  const persistedTasks = rows.map(item => toTask(item, 'Asia/Kolkata')).filter(Boolean);
+  assert.equal(persistedTasks.find(item => item.content.includes('portfolio')).kind, 'task');
+  const alert = persistedTasks.find(item => item.content.includes('call the bank'));
+  assert.equal(alert.kind, 'reminder');
+  assert.equal(alert.due_at, '2026-11-27T03:30:00.000Z');
+  const undated = persistedTasks.find(item => item.content.includes('spare keys'));
+  assert.equal(undated.kind, 'reminder');
+  assert.equal(undated.due_at, null);
+  assert.equal(persistedTasks.length, 3, 'An event, cancellation, or purchase cannot turn into an extra task.');
+  const { detectedEvents } = require('../.test-build/tasks.js');
+  const events = detectedEvents(rows);
+  assert.equal(events.length, 1);
+  assert.match(events[0].title, /dentist/i);
+  assert.equal(events[0].starts_at, '2026-11-28T09:30:00.000Z');
+  assert.equal(events[0].calendar_synced, false);
+  console.log(JSON.stringify({ mixedNote: 'passed', tasks: 1, reminders: 2, events: 1 }));
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -30,6 +30,7 @@ data class JournalUiState(
     val tasksError: String? = null,
     val updatingTasks: Set<String> = emptySet(),
     val completedTask: JournalTask? = null,
+    val savedNote: SaveResponse? = null,
     val taskFormOpen: Boolean = false,
     val creatingTask: Boolean = false,
     val taskFormError: String? = null,
@@ -73,7 +74,6 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     private var graphRequest = 0
     private var connectionJob: Job? = null
     private var tasksRequested = false
-    private var quickAddRequested = false
     private var taskRead = 0
 
     init {
@@ -97,7 +97,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                             destination = if (tasksRequested && device.session != null) Destination.Tasks else Destination.Moments, preview = false, loadingMoments = false, loadingReview = false, loadingGraph = false,
                             momentsError = null, reviewError = null, reflectionError = null, loadingReflection = false,
                             graphError = null, serverStatus = null, servicesError = null, loadingServices = false,
-                            taskFormOpen = quickAddRequested && device.session != null, creatingTask = false, taskFormError = null,
+                            taskFormOpen = false, creatingTask = false, taskFormError = null, savedNote = null,
                             tasks = device.cachedTasks[device.accountKey()].orEmpty(), loadingTasks = false, tasksError = null, updatingTasks = emptySet(), completedTask = null)
                         else current.copy(device = device, booting = false, tasks = if (current.preview) current.tasks else device.cachedTasks[device.accountKey()].orEmpty(),
                             review = if (tasksChanged && current.destination != Destination.Review) null else current.review,
@@ -105,7 +105,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                             loadingReflection = if (tasksChanged) false else current.loadingReflection)
                     }
                     if (changed && device.session != null) { refreshMoments(); refreshTasks() }
-                    if (device.session != null) { tasksRequested = false; quickAddRequested = false }
+                    if (device.session != null) tasksRequested = false
                     if (tasksChanged && state.value.destination == Destination.Review && !state.value.preview) loadReview()
                 }
             } catch (error: Exception) {
@@ -124,14 +124,11 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
         if (destination == Destination.Tasks && !state.value.preview) refreshTasks()
     }
 
-    fun openTasks(add: Boolean = false) {
+    fun openTasks() {
         tasksRequested = true
-        quickAddRequested = add
         if (state.value.device.session != null) {
             tasksRequested = false
-            quickAddRequested = false
             navigate(Destination.Tasks)
-            if (add) openTaskForm()
         }
     }
 
@@ -165,6 +162,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun dismissError() { mutable.update { it.copy(error = null) } }
+    fun dismissSaveReceipt() { mutable.update { it.copy(savedNote = null) } }
     fun consumeMessage() { mutable.update { it.copy(message = null) } }
 
     fun connectionEdited() {
@@ -259,7 +257,7 @@ class JournalViewModel(application: Application) : AndroidViewModel(application)
                 mutable.update { it.copy(draft = "", draftStored = true, review = null, graph = null,
                     loadingReview = false, loadingReflection = false, loadingGraph = false, loadingMoments = false,
                     reviewError = null, reflectionError = null, graphError = null,
-                    destination = Destination.Moments, message = "Moment saved · ${saved.extractedCount} ${if (saved.extractedCount == 1) "memory" else "memories"} kept") }
+                    destination = Destination.Moments, savedNote = saved) }
                 refreshMoments()
                 refreshTasks(restart = true)
             } catch (error: Exception) { report(error) }

@@ -5,6 +5,7 @@ import { ingestNote } from "@/lib/ingestion";
 import { errorMessage } from "@/lib/errors";
 import { validTimezone } from "@/lib/time";
 import type { SaveNoteResponse } from "@august/shared";
+import { detectedEvents, taskList } from "@/lib/tasks";
 
 export const maxDuration = 300;
 
@@ -15,7 +16,8 @@ async function handlePOST(request: Request) {
     const zone = validTimezone(timezone);
     if (!zone || (currentTime && !Number.isFinite(Date.parse(currentTime)))) return NextResponse.json({ error: "A valid timezone and reference time are required." }, { status: 400 });
     const result = await ingestNote(content.trim(), { key: request.headers.get("Idempotency-Key") || undefined, currentTime: currentTime || new Date().toISOString(), timezone: zone, syncCalendar: true });
-    return NextResponse.json(result satisfies SaveNoteResponse);
+    const response = { ...result, tasks: taskList(result.items, zone), events: detectedEvents(result.items) };
+    return NextResponse.json(response satisfies SaveNoteResponse);
   } catch (error) {
     console.error("Notes API error:", errorMessage(error));
     return NextResponse.json({ error: errorMessage(error) }, { status: 503 });

@@ -32,6 +32,10 @@ object TaskRuntime {
     private const val SYNC = "august-task-sync"
     private val revision = AtomicLong()
     fun identity(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(16).joinToString("") { "%02x".format(it) }
+    private fun scheduleTag(account: String, id: String, due: String, kind: String): String {
+        val suffix = if (kind == "reminder") "|reminder" else ""
+        return "task-schedule-${identity("$account|$id|$due$suffix")}"
+    }
     fun canNotify(context: Context): Boolean {
         val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(CHANNEL)
         return NotificationManagerCompat.from(context).areNotificationsEnabled() && channel?.importance != NotificationManager.IMPORTANCE_NONE &&
@@ -54,7 +58,9 @@ object TaskRuntime {
         val account = device.accountKey()
         val tasks = device.cachedTasks[account].orEmpty()
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Task deadlines", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "One day and one hour before task deadlines" })
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Tasks and reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Deadline alerts and reminders from your journal"
+        })
         manager.activeNotifications.filter { notification -> notification.tag == CHANNEL &&
             (!device.taskRemindersEnabled || notification.notification.extras.getString("account") != account || tasks.none { it.id == notification.notification.extras.getString("task_id") && !it.completed })
         }.forEach { manager.cancel(it.tag, it.id) }
@@ -65,7 +71,8 @@ object TaskRuntime {
         if (!device.taskRemindersEnabled || !canNotify(context)) { work.cancelAllWorkByTag(REMINDERS); return }
         // Cancel only obsolete task/deadline jobs. Replacing every job on sync
         // could cancel a reminder that is currently delivering for another task.
-        val validSchedules = tasks.filter { !it.completed && it.dueAt != null }.map { "task-schedule-${identity("$account|${it.id}|${it.dueAt}")}" }.toSet()
+        val validSchedules = tasks.filterNot { it.completed }
+            .mapNotNull { task -> task.dueAt?.let { scheduleTag(account, task.id, it, task.kind) } }.toSet()
         val pending = work.getWorkInfosByTag(REMINDERS)
         pending.addListener({
             if (version == revision.get()) runCatching { pending.get().filter { !it.state.isFinished && it.tags.none { tag -> tag in validSchedules } }.forEach { work.cancelWorkById(it.id) } }
@@ -73,10 +80,11 @@ object TaskRuntime {
         val now = Instant.now().epochSecond
         reminderPlan(tasks, now).filterNot { "${identity(account)}|${it.identity}" in device.deliveredTaskReminders }.forEach { reminder ->
             val record = "${identity(account)}|${reminder.identity}"
-            val data = workDataOf("account" to account, "task_id" to reminder.taskId, "due_at" to reminder.dueAt, "record" to record, "label" to reminder.label)
+            val data = workDataOf("account" to account, "task_id" to reminder.taskId, "due_at" to reminder.dueAt,
+                "record" to record, "kind" to reminder.kind)
             work.enqueueUniqueWork("task-reminder-${identity(record)}", ExistingWorkPolicy.KEEP,
                 OneTimeWorkRequestBuilder<TaskReminderWorker>().setInputData(data).setInitialDelay(reminder.at - now, TimeUnit.SECONDS).addTag(REMINDERS)
-                    .addTag("task-schedule-${identity("$account|${reminder.taskId}|${reminder.dueAt}")}").build())
+                    .addTag(scheduleTag(account, reminder.taskId, reminder.dueAt, reminder.kind)).build())
         }
     }
 
@@ -84,7 +92,7 @@ object TaskRuntime {
     fun notifyIfCurrent(context: Context, account: String, task: JournalTask, notification: Notification) {
         val latest = (context.applicationContext as AugustApplication).repository.state.value
         if (latest.accountKey() == account && latest.taskRemindersEnabled && canNotify(context) &&
-            latest.cachedTasks[account].orEmpty().any { it.id == task.id && !it.completed && it.dueAt == task.dueAt } &&
+            latest.cachedTasks[account].orEmpty().any { it.id == task.id && !it.completed && it.dueAt == task.dueAt && it.kind == task.kind } &&
             (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)) {
             NotificationManagerCompat.from(context).notify(CHANNEL, task.id.hashCode(), notification)
         }
@@ -133,13 +141,16 @@ class TaskReminderWorker(context: Context, parameters: WorkerParameters) : Corou
             val device = repository.state.value
             if (device.accountKey() != account || !device.taskRemindersEnabled || !TaskRuntime.canNotify(applicationContext)) return Result.success()
             val task = device.cachedTasks[account].orEmpty().find { it.id == inputData.getString("task_id") && !it.completed && it.dueAt == inputData.getString("due_at") } ?: return Result.success()
+            if (task.kind != (inputData.getString("kind") ?: "task")) return Result.success()
             val record = inputData.getString("record") ?: return Result.success()
             if (!repository.claimReminder(account, record)) return Result.success()
             val public = NotificationCompat.Builder(applicationContext, TaskRuntime.CHANNEL).setSmallIcon(R.drawable.ic_task_check).setContentTitle("August task reminder").setContentText("Open August to see your task.").build()
             val due = Instant.parse(task.dueAt)
             val deadline = DateTimeFormatter.ofPattern("MMM d · h:mm a").withZone(ZoneId.systemDefault()).format(due)
             val notification = NotificationCompat.Builder(applicationContext, TaskRuntime.CHANNEL).setSmallIcon(R.drawable.ic_task_check)
-                .setContentTitle(task.title).setContentText("${if (due.isBefore(Instant.now())) "Deadline was" else "Due"} $deadline")
+                .setContentTitle(task.title)
+                .setContentText(if (task.kind == "reminder") "Reminder · $deadline"
+                    else "${if (due.isBefore(Instant.now())) "Deadline was" else "Due"} $deadline")
                 .setContentIntent(TaskRuntime.openTasks(applicationContext, task.id.hashCode())).setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public)
                 .setExtras(android.os.Bundle().apply { putString("account", account); putString("task_id", task.id) }).build()

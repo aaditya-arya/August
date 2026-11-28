@@ -13,6 +13,12 @@ class ReminderPlanTest {
         val plan = reminderPlan(listOf(task("a", 172800)), now.epochSecond)
         assertEquals(listOf(now.epochSecond + 86400, now.epochSecond + 169200), plan.map { it.at })
     }
+    @Test fun journalReminderNotifiesAtItsOwnTime() {
+        val reminder = task("call", 172800).copy(kind = "reminder")
+        val plan = reminderPlan(listOf(reminder, task("unset", null).copy(kind = "reminder")), now.epochSecond)
+        assertEquals(listOf(now.epochSecond + 172800), plan.map { it.at })
+        assertEquals("reminder", plan.single().kind)
+    }
     @Test fun aCloseDeadlineGetsOnlyTheRemainingReminderOrTheDeadlineItself() {
         assertEquals(listOf(now.epochSecond + 3600), reminderPlan(listOf(task("a", 7200)), now.epochSecond).map { it.at })
         assertEquals(listOf(now.epochSecond + 600), reminderPlan(listOf(task("a", 600)), now.epochSecond).map { it.at })

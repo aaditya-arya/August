@@ -12,7 +12,7 @@ import android.widget.RemoteViews
 import androidx.core.net.toUri
 import androidx.work.*
 import app.august.nativejournal.AugustApplication
-import app.august.nativejournal.MainActivity
+import app.august.nativejournal.QuickTaskActivity
 import app.august.nativejournal.R
 import app.august.nativejournal.data.DeviceState
 import app.august.nativejournal.data.accountKey
@@ -63,8 +63,7 @@ class TaskWidget : AppWidgetProvider() {
             ids.forEach { widget ->
                 val views = RemoteViews(context.packageName, R.layout.task_widget)
                 views.setOnClickPendingIntent(R.id.widget_header, TaskRuntime.openTasks(context, widget))
-                val add = Intent(context, MainActivity::class.java).setAction("app.august.nativejournal.ADD_TASK")
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                val add = Intent(context, QuickTaskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 views.setOnClickPendingIntent(R.id.widget_add, PendingIntent.getActivity(context, widget, add,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
                 views.setTextViewText(R.id.widget_count, if (account == null) "Sign in to see tasks" else "${tasks.size} open")
@@ -73,7 +72,8 @@ class TaskWidget : AppWidgetProvider() {
                 tasks.take(maxRows).forEach { task ->
                     val row = RemoteViews(context.packageName, R.layout.task_widget_row)
                     row.setTextViewText(R.id.widget_task_title, task.title)
-                    val due = task.dueAt?.let { runCatching { DateTimeFormatter.ofPattern("MMM d · h:mm a").withZone(ZoneId.systemDefault()).format(Instant.parse(it)) }.getOrNull() } ?: "No deadline"
+                    val date = task.dueAt?.let { runCatching { DateTimeFormatter.ofPattern("MMM d · h:mm a").withZone(ZoneId.systemDefault()).format(Instant.parse(it)) }.getOrNull() }
+                    val due = if (task.kind == "reminder") date?.let { "Reminder · $it" } ?: "Reminder · no time" else date ?: "No deadline"
                     row.setTextViewText(R.id.widget_task_due, due)
                     row.setOnClickPendingIntent(R.id.widget_task_text, TaskRuntime.openTasks(context, task.id.hashCode()))
                     val intent = Intent(context, TaskWidget::class.java).setAction(COMPLETE)

@@ -3,7 +3,13 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#FAF9FD</item>
-        <item name="android:colorAccent">#5855D6</item>
+        <item name="android:windowBackground">#F3F4EF</item>
+        <item name="android:colorAccent">#155649</item>
+    </style>
+    <style name="Theme.August.QuickAdd" parent="Theme.August">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

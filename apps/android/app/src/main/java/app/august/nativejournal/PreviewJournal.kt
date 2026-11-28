@@ -11,6 +11,8 @@ object PreviewJournal {
         JournalTask("task-sample-1", "Build my portfolio website", "I want to create a website for the things I make.", now.plus(2, ChronoUnit.DAYS).toString(), updatedAt = now.toString(), createdAt = now.toString(), tags = listOf("website", "building")),
         JournalTask("task-sample-2", "Try the first product prototype", "I'm working on a small product and want to test the first version.", updatedAt = now.toString(), createdAt = now.toString(), tags = listOf("product")),
         JournalTask("task-sample-3", "Finish the settings screen", "Need to finish the app settings before tomorrow.", now.plus(1, ChronoUnit.DAYS).toString(), updatedAt = now.toString(), createdAt = now.toString()),
+        JournalTask("task-sample-5", "Call the print shop", "Remind me to call the print shop tomorrow.", now.plus(1, ChronoUnit.DAYS).toString(),
+            updatedAt = now.toString(), createdAt = now.toString(), kind = "reminder"),
         JournalTask("task-sample-4", "Sketch the first screen", "I finished the first sketch.", completed = true, completedAt = now.toString(), updatedAt = now.toString(), createdAt = now.toString()),
     )
     val moments = listOf(
