@@ -20,7 +20,7 @@ The installable development APK is `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Website download
 
-The website includes **Download for Android** on the public sign-in screen and in its navigation. The preview APK is served from `/downloads/august-android-preview.apk`, without requiring an account. Its version, byte count, and SHA-256 are recorded in `/downloads/android-release.json`.
+The website includes **Download for Android** on the public sign-in screen and in its navigation. The [0.4.0 preview APK](https://august-topaz.vercel.app/downloads/august-android-preview.apk) is available without signing in. The [release manifest](https://august-topaz.vercel.app/downloads/android-release.json) records its version, byte count, and SHA-256.
 
 After a new debug build, run `npm run package:android` from the repository root. This copies the APK into `public/downloads` and regenerates the release metadata. Commit both files so the web host can serve the installer without needing an Android SDK during deployment. The website labels this as a development preview, installed as August Dev; it is not a Play Store release.
 
@@ -34,7 +34,7 @@ Run the web backend from the repository root with `npm run dev:lan`, or use your
 | --- | --- |
 | Development PC, Android emulator | `http://10.0.2.2:3000` |
 | Development PC, physical phone on the same Wi-Fi | `http://YOUR_PC_LAN_IP:3000` |
-| Deployed backend | Your HTTPS origin |
+| Public August deployment | `https://august-topaz.vercel.app` |
 
 HTTP is enabled only in debug builds. Release builds require HTTPS. A physical phone needs a reachable development server and firewall permission. The app downloads only public auth configuration from `/api/auth/config`; never copy root `.env.local`, Gemini credentials, Google client secrets, or Supabase admin credentials into this Android project.
 
@@ -52,7 +52,7 @@ This pattern permits the per-attempt state query on one callback path. The nativ
 
 Google's authorized redirect URI remains the **Supabase** callback shown in its Google provider settings. Do not put the custom native scheme into Google's web-client redirect settings. Google Calendar authorization remains a separate web feature.
 
-## Implemented in this first native version
+## Features
 
 - Material 3 navigation, edge-to-edge layout, light/dark/system appearance, and native text input.
 - Google sign-in through the system browser/Custom Tabs with Supabase PKCE and token refresh.
@@ -61,13 +61,13 @@ Google's authorized redirect URI remains the **Supabase** callback shown in its 
 - Seven-day, thirty-day, and all-time source-backed reviews.
 - A checkmark Tasks tab with two-column grid/list layouts, undated and dated work, editable deadlines, completed filters, confirmation haptics, and Undo. Completions sync to the website and reviews.
 - A resizable **August Tasks** home-screen widget showing open tasks and deadlines, with direct completion and refresh. Add it from Tasks → **Reminders & widget**, or the launcher's widget picker.
-- Optional notification reminders one day and one hour before each deadline; near-term tasks fall back to the deadline itself. WorkManager handles persistence and background sync, and may defer delivery under battery restrictions. Notifications require Android permission. Completed, rescheduled, signed-out, and disabled tasks cancel obsolete reminder jobs.
+- With notifications allowed, open tasks get reminders one day and one hour before their deadline when those times are still ahead. If both have passed, August schedules a reminder at the deadline. WorkManager persists reminders and periodically refreshes tasks while connected. Android battery restrictions can delay delivery. Completion, rescheduling, sign-out, and disabling reminders cancel the relevant pending jobs.
 - A bounded force-directed connections canvas with pinch zoom, pan, selection, category filters, and an accessible list. At most 120 nodes are drawn at once.
 - Incoming plain-text Android shares that the user can append to their draft before saving.
 - AES-GCM encryption using an Android Keystore key and atomic file replacement for sessions, drafts, and a cache of the latest 200 loaded moments. Device data is excluded from backup.
 - An explicitly labelled sample journal for exploring the interface without credentials. Sample entries are never sent to the backend.
 
-Cached moments can be read offline while the local account session is retained; saving, new reviews, graphs, and authentication need connectivity. Draft persistence is debounced by 300 ms and flushed on activity stop and before saving. This is not background offline synchronization. Sign-out clears sessions and cached entries while retaining the account's encrypted draft.
+Cached moments and widget tasks can be read offline while the local account session is retained. Saving, widget completion, new reviews, graphs, and authentication need connectivity. A widget completion that cannot reach the server leaves the task open. Draft persistence is debounced by 300 ms and flushed on activity stop and before saving. Sign-out clears sessions and cached entries while retaining the account's encrypted draft.
 
 Detailed financial/goal-plan editing, Calendar authorization/session handoff, biometric locking, and offline note-upload synchronization remain follow-up work. Task sync and deadline notifications are available; saved writing still needs a network connection.
 

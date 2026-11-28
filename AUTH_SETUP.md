@@ -1,6 +1,6 @@
 # Google sign-in and saved progress
 
-The web and Android clients now use Supabase accounts. Saved notes, extracted items, plans, and graph connections belong to the signed-in account. Android sessions and new drafts use encrypted device storage; browser drafts stay in that browser's local storage. A draft becomes available on other devices after **Save moment** succeeds. This is not end-to-end encryption: the backend and AI processing still handle saved journal text.
+The web and Android clients share Supabase accounts. Saved notes, extracted items, tasks, plans, and graph connections belong to the signed-in account. Android uses encrypted device storage for sessions and drafts. Browser drafts stay in that browser's local storage. Saving a moment makes the saved data available to that account on other devices. The backend and AI processing handle saved journal text.
 
 The app code is ready for configuration. Live Google sign-in and account privacy are **not enabled until the following dashboard steps are complete**. The current public app key cannot administer your project. Do not paste Google client secrets or Supabase admin keys into chat or the mobile app.
 
@@ -50,13 +50,32 @@ Under Supabase → **Authentication → URL Configuration**:
 | Site URL during local testing | `http://localhost:3000` |
 | Additional redirect URL for local web | `http://localhost:3000/auth/callback` |
 | Android callback pattern | `augustnative://auth/callback?native_state=*` |
-| Additional redirect URL after deployment | `https://YOUR_WEB_HOST/auth/callback` |
+| Additional redirect URL for the public deployment | `https://august-topaz.vercel.app/auth/callback` |
 
 Set Site URL to the real HTTPS web origin when deploying. Native authentication uses a PKCE code exchange and the installed August app's URL scheme. Install the development APK or a signed release build to use the callback.
 
 The Kotlin client's callback pattern allows a per-attempt state query, validated along with PKCE in the app. See [the native Android guide](apps/android/README.md). Google's registered web-client callback remains Supabase's `/auth/v1/callback`.
 
-## 4. Verify before distributing
+## 4. Deploy and verify
+
+`main` serves [public production](https://august-topaz.vercel.app/). Pushes to `AndroidAppPushes` get a Vercel Preview. Set the following in the **August project** on Vercel under **Settings → Environment Variables**. Your PC's `.env.local` applies only to local runs.
+
+| Variable | Purpose and Vercel type |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Config. Your Supabase project URL, used by web and Android sign-in. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Config. The public Supabase key exposed to app clients. |
+| `NEXT_PUBLIC_APP_URL` | Config. Use `https://august-topaz.vercel.app` in Production. |
+| `GEMINI_API_KEY` | Secret. Required for AI extraction, embeddings, and generated reviews. |
+| `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` | Calendar OAuth client credentials. Store the secret as Secret. |
+| `CALENDAR_TOKEN_SECRET` | Optional Secret for encrypting Calendar session cookies. Defaults to `GOOGLE_CLIENT_SECRET`. |
+
+For Calendar, add `https://august-topaz.vercel.app/api/auth/google/callback` to the Google web OAuth client's **Authorized redirect URIs**. This callback is separate from the Supabase callback used by **Continue with Google**. The Calendar routes use the incoming request origin to construct their callback.
+
+Redeploy after changing variables. Production variables are scoped separately from Preview. An unconfigured preview can build and serve the APK, with sign-in unavailable. To test signed-in features on a preview, configure its public Supabase variables, the necessary server-side secrets, and that preview origin's allowed callback URLs. Prefer the public production URL for normal Android sign-in. A Vercel login page on a preview link can be caused by Deployment Protection. See [Vercel environment variables](https://vercel.com/docs/environment-variables) and [Deployment Protection](https://vercel.com/docs/deployment-protection).
+
+Check Vercel's deployment result for the most recent commit on the branch named in any failure email. An older failed deployment remains marked failed after a later commit builds successfully. If the latest build fails, open that deployment's build log and check its environment scope and first reported error.
+
+Optional `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, and `GEMINI_REVIEW_MODEL` settings override each respective model preference. See [the AI fallback behavior](RELIABILITY.md) and [the environment template](.env.example).
 
 From the repository root:
 
@@ -69,13 +88,9 @@ The diagnostic should report **Anonymous table access denied as expected** for a
 
 Open `http://localhost:3000`, sign in, save a test moment, sign out, then sign in again and confirm it remains. Use a second Google account in another browser profile and confirm it cannot see the first account's moment. Keep each test account on the Google testing allowlist if required. Test cloud saves on Android using the same Google account and backend.
 
-For the public deployment, use `https://august-topaz.vercel.app` in Android's connection screen. Set server variables on the **Vercel August project**, because the PC's `.env.local` does not configure deployed functions. Production needs public Supabase URL/key plus `GEMINI_API_KEY`; Calendar additionally needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Set `NEXT_PUBLIC_APP_URL=https://august-topaz.vercel.app`, and register `https://august-topaz.vercel.app/api/auth/google/callback` on the Google web OAuth client alongside the Supabase callback. The Calendar code uses the incoming request origin for its callback, including when a local environment still names localhost.
+On the live website, confirm **Download for Android** works while signed out. The public `/api/auth/config` endpoint can confirm that Google is enabled. Signed-out requests to `/api/tasks` and `/api/health` should return HTTP 401.
 
-Redeploy Production after changing its variables, and ensure the deployment includes the latest code, not an older main commit or a protected preview URL. If optional `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL`, or `GEMINI_REVIEW_MODEL` variables are present, they override the defaults; use the values in `.env.example` for the tested Lite preferences. Public Supabase URL/key are the only Supabase settings exposed to clients; AI keys and Calendar secrets stay on the server.
-
-Production-scoped Vercel variables are not automatically available to Preview deployments. A preview without public Supabase configuration can build and offer the Android download, but its sign-in stays unavailable. Add the appropriate variables to Preview and redeploy if you need to test authenticated web features there.
-
-Install the latest website APK as an update to August Dev. In Settings, check the version and **Server status**, then save a small test moment, open Review for All time, and open Connections. Review generation can fall back to a different model when Gemini is overloaded; if all models fail, original moments remain readable. Repeat the account-isolation check above on the phone. These authenticated device checks still need to be performed by the account holder.
+For a signed-in test on Android, install the [latest website APK](ANDROID.md#install-on-your-phone), then verify the version and **Server status** in Settings. Save a note such as “I want to build a portfolio website.” Confirm it appears in Tasks on Android and the web with no deadline. Add a deadline, pin **August Tasks**, and check the task off from the widget. Confirm it moves to Completed on the web after refresh. Open **All time** in Review and open Connections to verify the account can read both views. If stored entries report `permission denied for table extracted_items`, check the grants and RLS in [step 1](#1-apply-the-database-migration). If **Connect Google Calendar** reports that OAuth is not configured, check the Calendar credentials on Vercel Production and redeploy.
 
 ## 5. Recover earlier progress deliberately
 

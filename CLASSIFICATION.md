@@ -8,10 +8,13 @@ Ledger filters, Clusters and graph colors are derived from the actual stored cat
 
 Scheduling intent is independent of the human category. `calendar_action.kind` is task, reminder, event or none; these are scheduling controls, not a limit on expressive categories. A valid future trigger is still required, known non-obligation categories such as Wishlist cannot activate Calendar, and reviewed categories are validated again before persistence. Historical Task/Reminder/Event rows retain compatibility. Custom categories require explicit scheduling intent to create an event.
 
+Task tracking is separate from scheduling. Gemini proposes `task_action` for work the writer intends to do or is already doing, including building a site or working on a product. The server validates the title and deadline and stores the result in `calendar_action.task`, preserving the original category and source passage. Uncommitted ideas, purchase wishes, cancellations, and work described as finished stay out of the open task board. The field is empty when no task is extracted. Relative deadlines use the source block's recorded date. Date-only deadlines use 9:00 a.m. in the writer's timezone. Undated work appears in Tasks with no scheduled reminder.
+
 Validation commands:
 
 - `npm test`: deterministic classification, taxonomy/reuse/novelty, catalogue persistence/cache, scheduling, ingestion, graph, OAuth and scraper regressions.
 - `npm run test:ai`: live intent, tense, timezone and mixed-thought extraction checks.
+- `node tests/live-tasks.cjs` after compiling with `npx tsc -p tsconfig.test.json`: live task-intent and deadline checks on synthetic writing with no database or Calendar writes.
 - `npm run test:taxonomy`: live Wishlist-versus-Idea checks plus genuine new-category creation and subsequent synonym reuse. It makes no database or calendar writes.
 - `npm run lint` and `npm run build`: repository checks.
 

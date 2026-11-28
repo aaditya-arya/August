@@ -1,15 +1,17 @@
 # August
 
-August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, and a graph of related thoughts. Next.js serves the web app and backend. The native Kotlin / Jetpack Compose Android client lives in `apps/android`.
+August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, a task board, and a graph of related thoughts. The web app and API use Next.js, React, and TypeScript on Vercel. Supabase provides Google sign-in and account-owned PostgreSQL storage, including pgvector for related memories. Gemini handles extraction, embeddings, and reflections. The native Android client uses Kotlin, Jetpack Compose, Material 3, and WorkManager.
+
+Open the [live journal](https://august-topaz.vercel.app/) or [download Android 0.4.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) for Android 8.0 or newer. In August Dev, connect to `https://august-topaz.vercel.app` and sign in with the same Google account you use on the web. The live backend works without your PC running. See [Android setup](ANDROID.md) for installation and [deployment and OAuth setup](AUTH_SETUP.md#4-deploy-and-verify) for hosting.
 
 ## Run on another PC
 
 Install Git and Node.js with npm. The current working environment uses Node.js 22.23.1 and npm 10.9.8.
 
-Clone the branch containing the current web and Android implementation:
+Clone the repository from the production branch:
 
 ```powershell
-git clone --branch AndroidAppPushes https://github.com/aaditya-arya/August.git
+git clone --branch main https://github.com/aaditya-arya/August.git
 cd August
 npm ci
 Copy-Item .env.example .env.local
@@ -34,9 +36,9 @@ For the new native Material 3 application, open `apps/android` in Android Studio
 
 The checkmark tab on the website and Android keeps work mentioned in journal notes. “I want to create a website” and “I'm working on a product” become tasks even without dates; passing ideas, purchase wishes, cancellations, and already finished work are excluded. Explicit deadlines use the writer's timezone. Both clients offer grid/list views, deadline editing, completed filters, and completion with Undo. Completion is shared with Sunday Review through the existing account-owned entry metadata.
 
-Android 0.4.0 adds an **August Tasks** home-screen widget with quick completion and encrypted cached task data. In Tasks, expand **Reminders & widget** to enable notifications or pin the widget. Dated open tasks get reminders one day and one hour before their deadlines. A task created less than an hour before its deadline gets a reminder at the deadline instead. Undated and completed tasks do not schedule notifications. Android WorkManager persists scheduling across app restarts and reboot, with delivery subject to Android battery restrictions. Background sync runs approximately every 15 minutes when connected; opening Tasks or using widget refresh requests a fresh read.
+Android 0.4.0 adds a resizable **August Tasks** widget that lists open tasks and lets you check them off from the home screen. Expand **Tasks → Reminders & widget** to allow notifications or pin the widget. For open tasks with future deadlines, the Android app schedules reminders one day and one hour before, skipping times that have already passed. If neither reminder time remains, it schedules one at the deadline. Android battery restrictions can delay delivery. The widget shows cached tasks offline and needs a connection to save completions.
 
-Tasks reuse the account-protected `extracted_items` metadata. Deploy the updated backend and install the latest APK together. Google Calendar remains a separate integration: marking a task complete cancels Android reminders and prevents new Calendar events on note retries, but does not delete an existing Google Calendar event.
+Tasks reuse existing account-protected `extracted_items` metadata, so installations with the [ownership migration](AUTH_SETUP.md#1-apply-the-database-migration) need no additional SQL. Existing Task and Reminder entries remain eligible. Older entries are not reprocessed to discover previously unrecognized tasks. Marking a task complete cancels its Android reminders and leaves any existing Google Calendar event in place.
 
 The website's **Download for Android** button serves the packaged preview APK directly. To update that download after building a new APK, run `npm run package:android` and commit `public/downloads` with the release metadata.
 

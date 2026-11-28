@@ -2,13 +2,20 @@
 
 The Android app is a native Kotlin / Jetpack Compose application in [apps/android](apps/android/README.md), using Material 3. The web app and backend remain in the repository root.
 
-## Run on a physical phone
+## Install on your phone
 
-1. Run `npm run build:android` or open `apps/android` in Android Studio.
-2. Transfer `apps/android/app/build/outputs/apk/debug/app-debug.apk` to the phone and install **August Dev**.
-3. Run `npm run dev:lan` from the repository root. Keep that terminal running.
-4. Put both devices on the same Wi-Fi and enter the printed PC Wi-Fi address in the app.
-5. Tap **Check connection**. Once the server and Google provider are ready, tap **Continue with Google**.
+1. On an Android 8.0 or newer phone, [download August Dev 0.4.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) and install it. If Android asks, allow installs from the app you used to open the APK.
+2. Open August Dev and use `https://august-topaz.vercel.app` as the journal address. Tap **Check connection**, then **Continue with Google**.
+3. Open the checkmark **Tasks** tab. Under **Reminders & widget**, allow notifications and tap **Add home-screen widget**. You can also find **August Tasks** in your launcher's widget picker.
+
+The deployed backend works over Wi-Fi or mobile data with your PC switched off. If a protected Vercel preview asks you to log into Vercel, change the journal address to the public production URL above.
+
+## Develop on a physical phone over Wi-Fi
+
+1. Run `npm run build:android` or build from Android Studio.
+2. Transfer `apps/android/app/build/outputs/apk/debug/app-debug.apk` to the phone and install it.
+3. Run `npm run dev:lan` from the repository root and keep the terminal running.
+4. Put both devices on the same Wi-Fi and enter the printed PC Wi-Fi address in August Dev. Tap **Check connection**, then **Continue with Google**.
 
 A physical phone must use an address such as `http://192.168.1.31:3000`. `10.0.2.2` is an Android emulator alias. `0.0.0.0` means the server listens on all interfaces; it is not a destination address. DHCP can change the PC address, so use the value printed by the LAN command.
 
