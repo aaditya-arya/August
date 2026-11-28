@@ -55,6 +55,24 @@ test('Web draft autosaves raw text, isolates accounts, and rejects stale edits',
   assert.equal((await db.as('bob', readWebDraft)).draft.content, 'Independent draft');
 });
 
+test('Receipt carries original source positions and only confirmed Calendar sync', async t => {
+  const db = storage();
+  const content = '  Meeting tomorrow. I felt grateful.';
+  const time = new Date().toISOString();
+  const entries = [['Event', 0, 17], ['Quiet_Moment', 18, 34]].map(([category, start, end], i) => ({
+    id: String(i), category, content: content.trim().slice(start, end), created_at: time,
+    calendar_action: { is_actionable: i === 0, kind: i === 0 ? 'event' : 'none', start_time: i === 0 ? time : undefined,
+      memory: { version: 1, title: category, recorded_at: time, spans: [{ start, end }] } },
+  }));
+  t.mock.method(ingestion, 'ingestNote', async () => ({ items: entries, noteId: 'sample', extractedCount: entries.length }));
+  await db.as('writer', async () => {
+    const draft = await saveWebDraft({ content, expected: null });
+    const { receipt } = await organizeWebDraft(draft.revision);
+    assert.deepEqual(receipt.passages.map(p => [content.slice(p.start, p.end), p.kind, p.synced]),
+      [['Meeting tomorrow.', 'event', false], ['I felt grateful.', 'feeling', false]]);
+  });
+});
+
 test('Organizing locks the revision, preserves text after failure, and reuses filed results', async t => {
   const db = storage();
   const asUser = work => db.as('writer', work);

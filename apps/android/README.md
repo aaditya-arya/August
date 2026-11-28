@@ -20,7 +20,7 @@ The installable development APK is `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Website download
 
-The website includes **Download for Android** on the public sign-in screen and in its navigation. The [0.6.0 preview APK](https://august-topaz.vercel.app/downloads/august-android-preview.apk) is available without signing in. The [release manifest](https://august-topaz.vercel.app/downloads/android-release.json) records its version, byte count, and SHA-256. The app reads the public manifest from **Settings → App updates**. Each website release must retain the distributed APK's signing certificate for in-place updates.
+The website includes **Download for Android** on the public sign-in screen and in its navigation. The [0.7.0 preview APK](https://august-topaz.vercel.app/downloads/august-android-preview.apk) is available without signing in. The [release manifest](https://august-topaz.vercel.app/downloads/android-release.json) records its version, byte count, and SHA-256. The app reads the public manifest from **Settings → App updates**. Each website release must retain the distributed APK's signing certificate for in-place updates.
 
 After a new debug build, run `npm run package:android` from the repository root. This copies the APK into `public/downloads` and regenerates the release metadata. Commit both files so the web host can serve the installer without needing an Android SDK during deployment. The website labels this as a development preview, installed as August Dev; it is not a Play Store release.
 

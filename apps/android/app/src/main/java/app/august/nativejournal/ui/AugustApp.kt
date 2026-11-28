@@ -4,6 +4,9 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -96,20 +99,38 @@ fun AugustApp(model: JournalViewModel) {
                         snackbarHost = { SnackbarHost(snackbar) },
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding)) {
-                            tabs.SaveableStateProvider(state.destination.name) {
-                                when (state.destination) {
-                                    Destination.Moments -> MomentsScreen(
-                                        state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
-                                        retry = model::refreshMoments, dismissReceipt = model::dismissSaveReceipt, openTasks = model::openTasks,
-                                    )
-                                    Destination.Write -> WriteScreen(state, edit = model::edit, save = model::save)
-                                    Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
-                                    Destination.Tasks -> TasksScreen(
-                                        state, refresh = { model.refreshTasks() }, complete = model::completeTask, edit = model::editTask,
-                                        add = model::openTaskForm, reminders = model::taskReminders, write = { model.navigate(Destination.Write) },
-                                    )
-                                    Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
-                                    Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
+                            val pages = remember { listOf(Destination.Moments, Destination.Tasks, Destination.Review, Destination.Graph, Destination.Settings) }
+                            if (writing) {
+                                WriteScreen(state, edit = model::edit, save = model::save)
+                            } else {
+                                val pager = rememberPagerState(initialPage = pages.indexOf(state.destination), pageCount = { pages.size })
+                                LaunchedEffect(state.destination) {
+                                    val index = pages.indexOf(state.destination)
+                                    if (pager.currentPage != index) pager.scrollToPage(index)
+                                }
+                                LaunchedEffect(pager) {
+                                    snapshotFlow { pager.settledPage }.drop(1).collect { index ->
+                                        if (pages[index] != model.state.value.destination) model.navigate(pages[index])
+                                    }
+                                }
+                                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), key = { pages[it].name }) { index ->
+                                    val destination = pages[index]
+                                    tabs.SaveableStateProvider(destination.name) {
+                                        when (destination) {
+                                            Destination.Moments -> MomentsScreen(
+                                                state, selected = { selectedMoment = it }, write = { model.navigate(Destination.Write) },
+                                                retry = model::refreshMoments, dismissReceipt = model::dismissSaveReceipt, openTasks = model::openTasks,
+                                            )
+                                            Destination.Write -> WriteScreen(state, edit = model::edit, save = model::save)
+                                            Destination.Review -> ReviewScreen(state, load = model::loadReview, selected = { selectedMoment = it })
+                                            Destination.Tasks -> TasksScreen(
+                                                state, refresh = { model.refreshTasks() }, complete = model::completeTask, edit = model::editTask,
+                                                add = model::openTaskForm, reminders = model::taskReminders, write = { model.navigate(Destination.Write) },
+                                            )
+                                            Destination.Graph -> ConnectionsScreen(state, refresh = model::loadGraph, selectedMoment = { selectedMoment = it })
+                                            Destination.Settings -> SettingsScreen(state, appearance = model::appearance, signOut = model::signOut, checkServices = model::checkServices)
+                                        }
+                                    }
                                 }
                             }
                         }

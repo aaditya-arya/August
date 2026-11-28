@@ -1,10 +1,13 @@
 # August on Android
 
+Android 0.7.0 adds horizontal swipe navigation across Journal, Tasks, Review, Graph, and Settings. The tab buttons remain available. The writing screen has one large editor, and the Tasks focus deck scales and tilts cards as you swipe.
+
+
 The Android app is a native Kotlin / Jetpack Compose application in [apps/android](apps/android/README.md), using Material 3. The web app and backend remain in the repository root.
 
 ## Install on your phone
 
-1. On an Android 8.0 or newer phone, [download August Dev 0.6.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) and install it. If Android asks, allow installs from the app you used to open the APK.
+1. On an Android 8.0 or newer phone, [download August Dev 0.7.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) and install it. If Android asks, allow installs from the app you used to open the APK.
 2. Open August Dev and tap **Continue with Google**. The app uses `https://august-topaz.vercel.app` by default. A saved sign-in on an existing install can open the journal directly.
 3. Save a journal note such as “I'm building my portfolio. Remind me to call the bank tomorrow at 9 a.m.” The save summary shows the task and reminder, and both appear under **Tasks**.
 4. In **Tasks → Reminders & widget**, allow notifications and tap **Add home-screen widget**. The widget's **+** opens a small form over the home screen. Save or close it to go back to where you were. Each circle marks a task complete.

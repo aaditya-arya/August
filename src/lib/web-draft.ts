@@ -4,6 +4,8 @@ import { noteIdForKey } from "./ingestion-core";
 import { ingestNote } from "./ingestion";
 import { supabase } from "./supabase";
 import { detectedEvents, taskList } from "./tasks";
+import { getClassification } from "./ledger";
+import { memorySource } from "./memory-source";
 import { validTimezone } from "./time";
 import { canResumeDraft, MAX_DRAFT_LENGTH, type WebDraft } from "./web-draft-model";
 
@@ -79,8 +81,20 @@ export async function organizeWebDraft(revision: unknown): Promise<WebDraft> {
       currentTime: current.currentTime, syncCalendar: true,
     });
     const actions = taskList(result.items, current.timezone);
+    const leading = current.content.length - current.content.trimStart().length;
+    const passages = result.items.flatMap(item => {
+      const action = actions.find(task => task.id === item.id);
+      const category = getClassification(item);
+      const kind = action ? "work" as const : category.category === "Event" ? "event" as const
+        : ["quiet_moment", "perspective", "hard_truth", "shaairi_quote"].includes(category.texture) ||
+          /emotion|feeling|gratitude|anxiety|grief|joy/i.test(category.label) ? "feeling" as const : "memory" as const;
+      return (memorySource(item.calendar_action?.memory)?.spans ?? []).map(span => ({
+        start: leading + span.start, end: leading + span.end, kind, label: category.label,
+        dated: Boolean(action?.due_at || item.calendar_action?.start_time), synced: item.calendar_status === "synced",
+      }));
+    }).sort((a, b) => a.start - b.start);
     receipt = {
-      noteId: result.noteId, moments: result.extractedCount,
+      noteId: result.noteId, moments: result.extractedCount, passages,
       tasks: actions.filter(action => action.kind === "task").length,
       reminders: actions.filter(action => action.kind === "reminder").length,
       events: detectedEvents(result.items).length,

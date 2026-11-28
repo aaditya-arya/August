@@ -2,6 +2,7 @@ export const MAX_DRAFT_LENGTH = 12_000;
 export const DRAFT_LEASE_MS = 6 * 60_000;
 
 export type DraftReceipt = {
+  passages?: { start: number; end: number; label: string; kind: "work" | "event" | "feeling" | "memory"; dated: boolean; synced: boolean }[];
   noteId: string;
   moments: number;
   tasks: number;

@@ -2,7 +2,7 @@
 
 August is an AI-assisted life journal with categorized memories, source-grounded reflections, intention plans, a task board, and a graph of related thoughts. The web app and API use Next.js, React, and TypeScript on Vercel. Supabase provides Google sign-in and account-owned PostgreSQL storage, including pgvector for related memories. Gemini handles extraction, embeddings, and reflections. The native Android client uses Kotlin, Jetpack Compose, Material 3, and WorkManager.
 
-Open the [live journal](https://august-topaz.vercel.app/) or [download Android 0.6.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) for Android 8.0 or newer. Tap **Continue with Google** to connect to the public journal. Use the same account on web and Android to see your saved data. The live backend works while your PC is off. See [Android setup and updates](ANDROID.md) and [deployment and OAuth setup](AUTH_SETUP.md#4-deploy-and-verify).
+Open the [live journal](https://august-topaz.vercel.app/) or [download Android 0.7.0](https://august-topaz.vercel.app/downloads/august-android-preview.apk) for Android 8.0 or newer. Tap **Continue with Google** to connect to the public journal. Use the same account on web and Android to see your saved data. The live backend works while your PC is off. See [Android setup and updates](ANDROID.md) and [deployment and OAuth setup](AUTH_SETUP.md#4-deploy-and-verify).
 
 ## Run on another PC
 
@@ -35,6 +35,8 @@ Write in **Journal** after signing in. **Saved to cloud** means the latest text 
 Step away from the editor for about 15 seconds and August begins organizing the saved text into moments, tasks, reminders, and events. The receipt shows what was filed. Use **New entry** when you're ready to write again. If organization fails, your draft remains available and **Try again** retries it. **Text** adjusts size, typeface, and animation. **Focus** opens a full-screen editor, with Escape to return.
 
 **Connect Google Calendar** is separate from Google sign-in. After you return from Google, August checks Calendar access and reports the result. The sidebar shows the connection status and offers **Check connection**.
+
+Choose **Also connect Google Calendar** at sign-in to continue directly to Calendar consent. As you type, the editor previews scheduling and emotional language in blue and pink. After filing, highlights use Gemini's verified source passages. Task snippets move toward Tasks, successful Calendar writes toward Calendar, and other passages toward Clusters. Completing a task also animates toward Clusters. Reduced-motion settings keep the highlights static.
 
 ## Android
 

@@ -37,7 +37,7 @@ internal fun JournalDashboard(state: JournalUiState, write: () -> Unit, openTask
     val shape = RoundedCornerShape(34.dp)
     Box(
         Modifier.fillMaxWidth().clip(shape).background(
-            Brush.linearGradient(listOf(Color(0xFF0A252C), Color(0xFF104F53), Color(0xFF237C75))),
+            Brush.linearGradient(listOf(Color(0xFF141636), Color(0xFF253B83), Color(0xFF2166A0))),
         ),
     ) {
         Canvas(Modifier.matchParentSize()) {
@@ -47,8 +47,8 @@ internal fun JournalDashboard(state: JournalUiState, write: () -> Unit, openTask
             }
         }
         Column(Modifier.fillMaxWidth().padding(25.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            Text(today.format(DateTimeFormatter.ofPattern("EEE, MMM d")), color = Color(0xFFBCDFD8),
-                style = MaterialTheme.typography.labelLarge)
+            Text(today.format(DateTimeFormatter.ofPattern("EEE, MMM d")), color = Color(0xFFE4EBFF),
+                style = MaterialTheme.typography.titleLarge)
             Text(
                 if (state.draft.isBlank()) "What's on your mind?" else "Your draft is waiting",
                 color = Color.White, style = MaterialTheme.typography.displayMedium,

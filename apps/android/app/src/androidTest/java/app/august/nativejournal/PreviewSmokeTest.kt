@@ -7,6 +7,12 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -23,13 +29,15 @@ class PreviewSmokeTest {
         compose.onNodeWithText("Explore a sample journal").performScrollTo().performClick()
         compose.onNodeWithText("Sample journal").assertIsDisplayed()
         compose.onNodeWithText("What's on your mind?").assertIsDisplayed()
+        compose.onRoot().performTouchInput { swipeLeft() }
+        compose.onNode(isSelected() and hasText("Tasks")).assertIsDisplayed()
         compose.onNodeWithText("Review", useUnmergedTree = true).performClick()
         compose.onNodeWithText("See the bigger picture.").assertIsDisplayed()
         compose.onNodeWithText("Journal", useUnmergedTree = true).performClick()
         // The FAB enters after the pager and bottom-bar transition settle.
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Write a moment").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Write a moment").performClick()
-        compose.onNodeWithText("Today, I keep coming back to…").performTextInput("My own words in the native editor")
+        compose.onNode(hasSetTextAction()).performTextInput("My own words in the native editor")
         compose.onNodeWithText("Save moment").performScrollTo().performClick()
         compose.onNodeWithText("This is a sample journal. Connect your server to save your own moments.").assertIsDisplayed()
     }

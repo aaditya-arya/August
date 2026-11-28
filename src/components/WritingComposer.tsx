@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, Cloud, CloudOff, Maximize2, Minimize2, Plus, SlidersHorizontal } from "lucide-react";
 import { MAX_DRAFT_LENGTH } from "@/lib/web-draft-model";
 import { useJournalDraft } from "./CloudDraftProvider";
+import { PassageInk } from "./PassageInk";
 import styles from "./WritingComposer.module.css";
 
 type Preferences = { size: number; face: "serif" | "sans"; still: boolean };
@@ -22,6 +23,7 @@ function readPreferences(): Preferences {
 
 export function WritingComposer() {
   const [focus, setFocus] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
   const [preferences, setPreferences] = useState(defaults);
   const cloudDraft = useJournalDraft();
   const { view, dirty, setEditorActive } = cloudDraft;
@@ -168,9 +170,14 @@ export function WritingComposer() {
         </div>
       </div>
       <label htmlFor={id} className="sr-only">Journal entry</label>
+      <div className={styles.writingArea}>
+      <div className={styles.inkClip} aria-hidden="true"><div className={`${styles.field} ${styles.ink} ${preferences.face === "sans" ? styles.sans : ""}`} style={{ fontSize: `${preferences.size / 16}rem` }}>
+        <PassageInk text={view.content} receipt={receipt} still={preferences.still} shift={scrollTop} />
+      </div></div>
       <textarea
         id={id}
         ref={field}
+        onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
         className={`${styles.field} ${preferences.face === "sans" ? styles.sans : ""}`}
         style={{ fontSize: `${preferences.size / 16}rem` }}
         value={view.content}
@@ -182,6 +189,7 @@ export function WritingComposer() {
         aria-describedby={`${id}-hint`}
         rows={11}
       />
+      </div>
       {view.conflict && <div className={styles.feedback} role="alert">
         <p>Your text is still here. Choose which draft to continue with.</p>
         <button type="button" onClick={() => { cloudDraft.useCloud(); field.current?.focus(); }}>Load cloud draft</button>

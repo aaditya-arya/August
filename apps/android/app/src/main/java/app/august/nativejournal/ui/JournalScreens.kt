@@ -94,47 +94,13 @@ fun MomentsScreen(
     }
 }
 
-private data class WritingMode(val name: String, val hint: String, val prompts: List<String>)
-private val modes = listOf(
-    WritingMode("Free write", "Today, I keep coming back to…", listOf("What's taking up space in your mind?", "What's one small moment you'd like to keep?")),
-    WritingMode("Little joys", "Something small that made today better…", listOf("Who made your day a little lighter?", "What felt ordinary, but lovely looking back?")),
-    WritingMode("Let it out", "If I'm being honest with myself…", listOf("What don't you need to figure out tonight?", "What would you say to a friend who felt this way?")),
-    WritingMode("Dream a little", "I'd love to make more room for…", listOf("What would you try without needing to be good at it?", "What's a small first step toward something you want?")),
-)
-
 @Composable
 fun WriteScreen(state: JournalUiState, edit: (String) -> Unit, save: () -> Unit) {
-    var modeIndex by rememberSaveable { mutableIntStateOf(0) }
-    var promptIndex by rememberSaveable { mutableIntStateOf(0) }
-    var prompts by rememberSaveable { mutableStateOf(false) }
-    val mode = modes[modeIndex]
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Spacer(Modifier.height(4.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Start anywhere.", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
-            FilterChip(selected = prompts, onClick = { prompts = !prompts }, label = { Text("Prompts") })
-        }
-        if (!state.preview && state.draft.isBlank()) {
-            Text("Write a thought or a plan. August picks up tasks, reminders, and events when you save.",
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        AnimatedVisibility(
-            visible = prompts,
-            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
-        ) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(modes.indices.toList()) { index -> FilterChip(selected = index == modeIndex, onClick = { modeIndex = index; promptIndex = 0 }, label = { Text(modes[index].name) }) }
-            }
-        }
-        val editorMinHeight by animateDpAsState(
-            targetValue = if (prompts) 230.dp else 290.dp,
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-            label = "editorMinHeight",
-        )
-        OutlinedTextField(state.draft, edit, modifier = Modifier.fillMaxWidth().heightIn(min = editorMinHeight),
-            enabled = !state.saving, placeholder = { Text(mode.hint, style = MaterialTheme.typography.bodyLarge) },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 30.sp), shape = RoundedCornerShape(24.dp),
+        Text("Your page", style = MaterialTheme.typography.displayMedium)
+        OutlinedTextField(state.draft, edit, modifier = Modifier.fillMaxWidth().heightIn(min = 330.dp),
+            enabled = !state.saving, placeholder = { Text("Start anywhere...", style = MaterialTheme.typography.bodyLarge) },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontSize = 22.sp, lineHeight = 34.sp), shape = RoundedCornerShape(24.dp),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             if (state.draft.isNotBlank() && !state.preview) Text(if (state.draftStored) "Draft saved on device" else "Saving draft…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -145,22 +111,7 @@ fun WriteScreen(state: JournalUiState, edit: (String) -> Unit, save: () -> Unit)
             if (state.saving) { CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp); Spacer(Modifier.width(12.dp)) }
             Text(if (state.saving) "Saving your moment…" else "Save moment")
         }
-        AnimatedVisibility(
-            visible = prompts,
-            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
-        ) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("NEED A STARTING POINT?", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    Text(mode.prompts[promptIndex], style = MaterialTheme.typography.titleMedium)
-                    Row {
-                        TextButton(enabled = !state.saving, onClick = { edit(listOf(state.draft.trimEnd(), mode.prompts[promptIndex]).filter { it.isNotBlank() }.joinToString("\n\n") + "\n") }) { Text("Use this prompt") }
-                        TextButton(onClick = { promptIndex = (promptIndex + 1) % mode.prompts.size }) { Text("Another") }
-                    }
-                }
-            }
-        }
+
     }
 }
 

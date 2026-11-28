@@ -87,9 +87,9 @@ export function CalendarControl({ compact = false }: { compact?: boolean }) {
   const icon = status === "connected" ? <CheckCircle2 size={17} /> : status === "checking" ? <Loader2 size={17} className="motion-safe:animate-spin" /> : <Calendar size={17} />;
   const label = status === "connected" ? "Google Calendar connected" : status === "checking" ? "Checking Google Calendar" : "Connect Google Calendar";
   if (compact) return status === "connected" || status === "checking"
-    ? <button type="button" aria-label={label} title={label} disabled={status === "checking"} onClick={connection?.check} className="rounded-xl border border-border p-2.5 text-accent">{icon}</button>
-    : <a href="/api/auth/google" aria-label={label} title={label} className="rounded-xl border border-border p-2.5 text-accent">{icon}</a>;
-  return <div className="rounded-2xl border border-border bg-surface p-3.5">
+    ? <button data-calendar-target type="button" aria-label={label} title={label} disabled={status === "checking"} onClick={connection?.check} className="rounded-xl border border-border p-2.5 text-accent">{icon}</button>
+    : <a data-calendar-target href="/api/auth/google" aria-label={label} title={label} className="rounded-xl border border-border p-2.5 text-accent">{icon}</a>;
+  return <div data-calendar-target className="rounded-2xl border border-border bg-surface p-3.5">
     <div className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent">{icon}</span> Google Calendar</div>
     <p className="mt-1.5 text-xs leading-5 text-muted">{status === "connected" ? "Connected" : status === "checking" ? "Checking connection…" : status === "problem" ? "Connection unavailable" : "Not connected"}</p>
     {status === "connected" || status === "problem" ? (

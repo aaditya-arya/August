@@ -21,6 +21,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(client !== null);
   const [busy, setBusy] = useState(false);
+  const [connectCalendar, setConnectCalendar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(client ? null : false);
   const accountId = useRef<string | null>(null);
@@ -56,6 +57,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
   async function signIn() {
     if (!client) return;
     setBusy(true); setError(null);
+    document.cookie = `august_connect_calendar=${connectCalendar ? 'yes' : ''}; Path=/auth/callback; Max-Age=${connectCalendar ? 600 : 0}; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
     const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/auth/callback`, queryParams: { prompt: 'select_account' } } });
     if (error) { setError('Google sign-in could not start. Please try again once account setup is complete.'); setBusy(false); }
   }
@@ -79,6 +81,7 @@ export function AuthBoundary({ children }: { children: ReactNode }) {
       <div className="mb-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent"><Feather size={23} /></div>
       <h1 className="font-serif text-4xl leading-tight tracking-tight">Your words.<br /><em className="text-accent">Your little world.</em></h1>
       <p className="mb-8 mt-5 text-sm leading-7 text-muted">Keep your moments, ideas, and progress together. Sign in with the same Google account on your phone and the web.</p>
+      <label className="mb-4 flex items-center gap-3 text-sm"><input type="checkbox" checked={connectCalendar} disabled={busy} onChange={event => setConnectCalendar(event.target.checked)} /> Also connect Google Calendar</label>
       <button type="button" onClick={() => void signIn()} disabled={busy || googleEnabled !== true} className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl bg-accent px-5 py-3 text-sm font-medium text-white disabled:opacity-45 dark:text-background">
         {busy ? <Loader2 size={17} className="animate-spin" /> : <span className="font-sans text-lg font-semibold" aria-hidden="true">G</span>} Continue with Google
       </button>

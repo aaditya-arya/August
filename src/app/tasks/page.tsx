@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Check, CheckCircle2, Circle, Clock3, LayoutGrid, List, Loader2, Pencil, Plus, RotateCcw, X } from 'lucide-react';
+import { flyPassage } from '@/lib/journal-motion';
 import { refreshTasks, updateTask, useTasks } from '@/lib/use-tasks';
 import type { JournalTask } from '@/lib/tasks';
 import { useReviewClock } from '@/lib/use-intentions';
@@ -21,8 +22,12 @@ export default function TasksPage() {
   const [notice, setNotice] = useState<JournalTask | null>(null);
   const completed = tasks.filter(task => task.completed).length;
   const visible = tasks.filter(task => filter === 'all' || task.completed === (filter === 'completed')).sort((a, b) => Number(a.completed) - Number(b.completed) || (a.due_at || '9999').localeCompare(b.due_at || '9999'));
-  async function toggle(task: JournalTask) {
-    try { await updateTask(task.id, { completed: !task.completed }); setNotice(task.completed ? null : task); }
+  async function toggle(task: JournalTask, from: DOMRect) {
+    try {
+      await updateTask(task.id, { completed: !task.completed });
+      setNotice(task.completed ? null : task);
+      if (!task.completed) flyPassage(from, 'nav a[href="/clusters"]', task.title, "#d8d1fc");
+    }
     catch { /* The shared task board shows the error and restores the card. */ }
   }
   return <div className="mx-auto max-w-6xl px-5 py-9 pb-28 sm:px-10 sm:py-12">
@@ -44,7 +49,7 @@ export default function TasksPage() {
     {!loading && !visible.length && <div className="rounded-3xl border border-dashed border-border px-7 py-16 text-center"><CheckCircle2 className="mx-auto mb-5 text-accent" size={36} /><h2 className="font-serif text-2xl">{filter === 'completed' ? 'Your wins will live here.' : tasks.length ? 'A clear little space.' : 'Start with something you want to make.'}</h2><p className="mx-auto mt-4 max-w-md text-sm leading-7 text-muted">{tasks.length ? 'Try another filter to see the rest of your tasks.' : 'Write “I want to build a portfolio website” in your journal. Add a deadline if you have one; August keeps the task either way.'}</p></div>}
     <div className={view === 'grid' ? 'grid grid-cols-1 gap-4 min-[360px]:grid-cols-2 xl:grid-cols-3' : 'grid grid-cols-1 gap-3'}>{visible.map(task => <article key={task.id} className={`group rounded-3xl border bg-surface p-4 sm:p-5 transition-all ${task.completed ? 'border-border opacity-70' : 'border-border hover:border-accent/40 hover:shadow-sm'}`}>
       <div className="flex items-center justify-between gap-3">
-        <button disabled={updating.includes(task.id)} onClick={() => void toggle(task)} aria-label={`${task.completed ? 'Reopen' : 'Complete'} ${task.title}`} className={`shrink-0 rounded-full p-1 transition-transform active:scale-90 ${task.completed ? 'bg-accent text-white' : 'text-accent hover:bg-accent/10'}`}>{updating.includes(task.id) ? <Loader2 size={23} className="animate-spin" /> : task.completed ? <Check size={23} /> : <Circle size={23} />}</button>
+        <button disabled={updating.includes(task.id)} onClick={event => void toggle(task, event.currentTarget.getBoundingClientRect())} aria-label={`${task.completed ? 'Reopen' : 'Complete'} ${task.title}`} className={`shrink-0 rounded-full p-1 transition-transform active:scale-90 ${task.completed ? 'bg-accent text-white' : 'text-accent hover:bg-accent/10'}`}>{updating.includes(task.id) ? <Loader2 size={23} className="animate-spin" /> : task.completed ? <Check size={23} /> : <Circle size={23} />}</button>
         <button disabled={updating.includes(task.id)} onClick={() => setEditing(task)} aria-label={`Edit ${task.title}`} className="rounded-lg p-2 text-muted hover:bg-accent/10 hover:text-accent"><Pencil size={15} /></button>
       </div>
       <h2 className={`mt-3 break-words font-sans text-base font-semibold leading-7 ${task.completed ? 'line-through decoration-accent/50' : ''}`}>{task.title}</h2>

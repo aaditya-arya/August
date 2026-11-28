@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -218,7 +219,13 @@ private fun TaskDeck(
             pageSpacing = 10.dp, key = { tasks[it].id },
         ) { index ->
             val task = tasks[index]
-            PlannerCard(task, task.id in updating, now, true, Modifier.heightIn(min = 225.dp), complete) { edit(task) }
+            PlannerCard(task, task.id in updating, now, true, Modifier.graphicsLayer {
+                val distance = kotlin.math.abs(pager.currentPage - index + pager.currentPageOffsetFraction).coerceIn(0f, 1f)
+                scaleX = 1f - .09f * distance
+                scaleY = scaleX
+                rotationZ = -3f * distance
+                alpha = 1f - .22f * distance
+            }.heightIn(min = 250.dp), complete) { edit(task) }
         }
         if (tasks.size > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }, enabled = pager.currentPage > 0) {
